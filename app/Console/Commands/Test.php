@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Console\Commands;
+use Maatwebsite\Excel\Excel;
 
 use Illuminate\Console\Command;
 
@@ -25,9 +26,13 @@ class Test extends Command
      *
      * @return void
      */
-    public function __construct()
+
+    private $excel;
+
+    public function __construct(Excel $excel)
     {
         parent::__construct();
+        $this->excel = $excel;
     }
 
     /**
