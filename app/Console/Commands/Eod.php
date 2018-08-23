@@ -6,84 +6,38 @@ use Carbon\Carbon;
 use Exception;
 use Illuminate\Console\Command;
 
-class Test extends Command
+class Eod extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
-    protected $signature = 'cmd:test {date : YYYY-MM-DD}';
+  protected $signature = 'eod {date : YYYY-MM-DD}';
+  protected $description = 'Command description';
+  private $excel;
+  private $sysinfo;
+  private $extracted_path;
 
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
-    protected $description = 'Command description';
+  public function __construct(Excel $excel) {
+      parent::__construct();
+      $this->excel = $excel;
+      $this->sysinfo();
+      $this->extracted_path = 'C:\\GI_GLO';
+      $this->lessor = ['pro'];
+      $this->path = 'C:\\EOD_FILES';
+  }
 
-    /**
-     * Create a new command instance.
-     *
-     * @return void
-     */
+  public function handle() {
 
-    private $excel;
-    private $sysinfo;
-    private $extracted_path;
-
-    public function __construct(Excel $excel)
-    {
-        parent::__construct();
-        $this->excel = $excel;
-        $this->sysinfo();
-        $this->extracted_path = 'C:\\GI_GLO';
-        $this->lessor = ['pro'];
-        $this->path = 'C:\\EOD_FILES';
-    }
-
-    /**
-     * Execute the console command.
-     *
-     * @return mixed
-     */
-    public function handle()
-    {
-
-        $date = $this->argument('date');
-        if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $date)) {
-          $this->info('Invalid date.');
-          exit;
-        }
-
-        $date = Carbon::parse($date);
-
-        $this->checkOrder();
-        $this->checkCashAudit($date);
-
-        $this->generateEod($date);
-
-
-
+      $date = $this->argument('date');
+      if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $date)) {
+        $this->info('Invalid date.');
         exit;
+      }
 
-        
-       
-        
-      
-        $this->info($this->sysinfo->gi_brcode);
-        $this->info($this->sysinfo->grs_total);
-        $this->info($this->sysinfo->tenantname);
-        $this->info($this->sysinfo->pos_no);
-        $this->info($this->sysinfo->txt_path);
+      $date = Carbon::parse($date);
 
-      //$this->excel->store(collect([['test', 'test'], ['test', 'test']]), 'invoices.csv');
-        //$dir = storage_path('\csv\\');
-        
-        
-    }
+      $this->checkOrder();
+      $this->checkCashAudit($date);
 
-
+      $this->generateEod($date);
+  }
 
   private function getSysinfo($r) {
     $s = new StdClass;
@@ -225,10 +179,8 @@ class Test extends Command
     $c = $this->proCharges($date);
     $s = $this->proSalesmtd($date);
 
-    //$this->proDaily($date, $c, $s);
+    $this->proDaily($date, $c, $s);
     $this->proHourly($date, $s);
-
-    
   }
 
   private function proDaily($date, $c, $s) {
@@ -265,7 +217,7 @@ class Test extends Command
 
     $f = $this->getpath().DS.$filename.'.csv';
     if (file_exists($f)) {
-      $this->info($f.' - OK');
+      $this->info($f.' - Eod OK');
       return true;
     } else {
       $this->info($f.' - Error on generating');
@@ -294,7 +246,7 @@ class Test extends Command
 
         $f = $this->getpath().DS.$filename.'.csv';
         if (file_exists($f)) {
-          $this->info($f.' - OK');
+          $this->info($f.' - Hourly OK');
         } else {
           $this->info($f.' - Error on generating');
         }
