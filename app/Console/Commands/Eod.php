@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 class Eod extends Command
 {
-  protected $signature = 'eod {date : YYYY-MM-DD}';
+  protected $signature = 'eod {date : YYYY-MM-DD} {--ext=CSV : YYYY-MM-DD}';
   protected $description = 'Command description';
   private $excel;
   private $sysinfo;
@@ -31,12 +31,18 @@ class Eod extends Command
         exit;
       }
 
+      $ext = $this->option('ext');
+      if (!in_array(strtolower($ext), ['txt', 'csv'])) {
+        $this->info('Invalid file extension.');
+        exit;
+      }
+
       $date = Carbon::parse($date);
 
       $this->checkOrder();
       $this->checkCashAudit($date);
 
-      $this->generateEod($date);
+      $this->generateEod($date, $ext);
   }
 
   private function getSysinfo($r) {
@@ -135,7 +141,7 @@ class Eod extends Command
     return $this->path;
   }
 
-  private function toCSV($data, $filename=NULL) {
+  private function toCSV($data, $filename=NULL, $ext='CSV') {
 
     $file = is_null($filename)
       ? Carbon::now()->format('YmdHis v')
@@ -146,7 +152,7 @@ class Eod extends Command
     if(!is_dir($dir))
         mkdir($dir, 0775, true);
 
-    $file = $dir.DS.$file.'.csv';
+    $file = $dir.DS.$file.'.'.$ext;
 
     $fp = fopen($file, 'w');
 
@@ -157,7 +163,30 @@ class Eod extends Command
     fclose($fp);
   }
 
-  private function generateEod(Carbon $date) {
+  private function toTXT($data, $filename=NULL, $ext='TXT') {
+
+    $file = is_null($filename)
+      ? Carbon::now()->format('YmdHis v')
+      : $filename;
+
+    $dir = $this->getpath();
+
+    if(!is_dir($dir))
+        mkdir($dir, 0775, true);
+
+    $file = $dir.DS.$file.'.'.$ext;
+
+    $fp = fopen($file, 'w');
+
+    foreach ($data as $fields) {
+      //$this->info(join(',', $fields));
+      fwrite($fp, join(',', $fields).PHP_EOL);
+    }
+
+    fclose($fp);
+  }
+
+  private function generateEod(Carbon $date, $ext) {
     $lessor = strtolower($this->sysinfo->lessorcode);
     if (empty($lessor))
       throw new Exception("Error: LESSORINFO on SYSINFO.DBF is empty."); 
@@ -169,21 +198,21 @@ class Eod extends Command
 
     $this->info('Generating file for: '.$lessor.' '.$date->format('Y-m-d'));
 
-    $this->{$lessor}($date);
+    $this->{$lessor}($date, $ext);
   }
 
 
   /*********************************************************** PRO ****************************************/
-  public function PRO(Carbon $date) {
+  public function PRO(Carbon $date, $ext) {
 
     $c = $this->proCharges($date);
     $s = $this->proSalesmtd($date);
 
-    $this->proDaily($date, $c, $s);
-    $this->proHourly($date, $s);
+    $this->proDaily($date, $c, $s, $ext);
+    $this->proHourly($date, $s, $ext);
   }
 
-  private function proDaily($date, $c, $s) {
+  private function proDaily($date, $c, $s, $ext='CSV') {
 
     $filename = substr($this->sysinfo->tenantname, 0, 3).$this->sysinfo->pos_no.$date->format('dmy');
 
@@ -213,11 +242,14 @@ class Eod extends Command
       $this->sysinfo->pos_no //TERMINUM
     ];
 
-    $this->toCSV($data, $filename);
+    if (strtolower($ext)=='csv')
+      $this->toCSV($data, $filename, $ext);
+    else
+      $this->toTXT($data, $filename, $ext);
 
-    $f = $this->getpath().DS.$filename.'.csv';
+    $f = $this->getpath().DS.$filename.'.'.$ext;
     if (file_exists($f)) {
-      $this->info($f.' - Eod OK');
+      $this->info($f.' - Daily OK');
       return true;
     } else {
       $this->info($f.' - Error on generating');
@@ -225,7 +257,7 @@ class Eod extends Command
     }
   }
 
-  private function proHourly(Carbon $date, $s) {
+  private function proHourly(Carbon $date, $s, $ext='CSV') {
 
     if (count($s['hrly'])>0) {
       foreach ($s['hrly'] as $key => $v) {
@@ -242,9 +274,12 @@ class Eod extends Command
           $this->sysinfo->pos_no //TERMINUM
         ];
 
-        $this->toCSV($data, $filename);
+        if (strtolower($ext)=='csv')
+          $this->toCSV($data, $filename, $ext);
+        else
+          $this->toTXT($data, $filename, $ext);
 
-        $f = $this->getpath().DS.$filename.'.csv';
+        $f = $this->getpath().DS.$filename.'.'.$ext;
         if (file_exists($f)) {
           $this->info($f.' - Hourly OK');
         } else {
@@ -253,8 +288,6 @@ class Eod extends Command
       }
     } else
       $this->info('No sales record found on SALESMTD.DBF');
-    
-
   }
 
   private function proCharges(Carbon $date) {
