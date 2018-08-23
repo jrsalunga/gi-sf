@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 class Eod extends Command
 {
-  protected $signature = 'eod {date : YYYY-MM-DD} {--ext=CSV : YYYY-MM-DD}';
+  protected $signature = 'eod {date : YYYY-MM-DD} {--ext=CSV : File Extension}';
   protected $description = 'Command description';
   private $excel;
   private $sysinfo;
@@ -19,8 +19,8 @@ class Eod extends Command
       $this->excel = $excel;
       $this->sysinfo();
       $this->extracted_path = 'C:\\GI_GLO';
-      $this->lessor = ['pro'];
-      $this->path = 'C:\\EOD_FILES';
+      $this->lessor = ['pro', 'aol'];
+      $this->path = 'C:\\EODFILES';
   }
 
   public function handle() {
@@ -141,13 +141,13 @@ class Eod extends Command
     return $this->path;
   }
 
-  private function toCSV($data, $filename=NULL, $ext='CSV') {
+  private function toCSV($data, $date, $filename=NULL, $ext='CSV') {
 
     $file = is_null($filename)
       ? Carbon::now()->format('YmdHis v')
       : $filename;
 
-    $dir = $this->getpath();
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
 
     if(!is_dir($dir))
         mkdir($dir, 0775, true);
@@ -163,13 +163,13 @@ class Eod extends Command
     fclose($fp);
   }
 
-  private function toTXT($data, $filename=NULL, $ext='TXT') {
+  private function toTXT($data, $date, $filename=NULL, $ext='TXT') {
 
     $file = is_null($filename)
       ? Carbon::now()->format('YmdHis v')
       : $filename;
 
-    $dir = $this->getpath();
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
 
     if(!is_dir($dir))
         mkdir($dir, 0775, true);
@@ -200,6 +200,78 @@ class Eod extends Command
 
     $this->{$lessor}($date, $ext);
   }
+
+  /*********************************************************** AOL ****************************************/
+  public function AOL(Carbon $date, $ext) {
+    $c = $this->aolCharges($date);
+  }
+
+
+  public function aolCharges(Carbon $date) {
+    $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
+    if (file_exists($dbf_file)) {
+      $db = dbase_open($dbf_file, 0);
+      
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);
+      $update = 0;
+      
+      $ds = [];
+      $ds['grschrg'] = 0;
+      $ds['vat'] = 0;
+      $ds['totdisc'] = 0;
+      $ds['disccnt'] = 0;
+      $ds['sale_cash'] = 0;
+      $ds['sale_chrg'] = 0;
+      $ds['begdor'] = NULL;
+      $ds['endor'] = NULL;
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
+        } catch(Exception $e) {
+          continue;
+        }
+        
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+          $data = $this->associateAttributes($row);
+
+          if (is_null($ds['begor']))
+            $ds['begor'] = $data['cslipno'];
+          $ds['endor'] = $data['cslipno'];
+
+          $ds['grschrg']  += $data['tot_chrg'];
+          $ds['vat']      += $data['vat'];
+          $ds['totdisc']  += ($data['promo_amt'] + $data['sr_disc'] + $data['oth_disc'] + $data['u_disc']);
+          if ($ds['totdisc']>0)
+            $ds['disccnt']++;
+
+          if (strtolower($data['terms'])=='charge')
+            $ds['sale_chrg'] += $data['tot_chrg'];
+          else
+            $ds['sale_cash'] += $data['tot_chrg'];
+
+
+          $h = substr($data['ordtime'], 0, 2);
+          if (array_key_exists($h, $ds['hrly']))
+            $ds['hrly'][$h] += $data['tot_chrg'];
+          else
+            $ds['hrly'][$h] = $data['tot_chrg'];
+
+          
+          $update++;
+        }
+      }
+      $ds['trancnt'] = $update;
+      
+      dbase_close($db);
+      return $ds;
+    } else {
+      throw new Exception("Cannot locate CHARGES.DBF"); 
+    }
+  }
+  /*********************************************************** End: AOL ****************************************/
 
 
   /*********************************************************** PRO ****************************************/
@@ -243,11 +315,11 @@ class Eod extends Command
     ];
 
     if (strtolower($ext)=='csv')
-      $this->toCSV($data, $filename, $ext);
+      $this->toCSV($data, $date, $filename, $ext);
     else
-      $this->toTXT($data, $filename, $ext);
+      $this->toTXT($data, $date, $filename, $ext);
 
-    $f = $this->getpath().DS.$filename.'.'.$ext;
+    $f = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$filename.'.'.$ext;
     if (file_exists($f)) {
       $this->info($f.' - Daily OK');
       return true;
@@ -275,11 +347,11 @@ class Eod extends Command
         ];
 
         if (strtolower($ext)=='csv')
-          $this->toCSV($data, $filename, $ext);
+          $this->toCSV($data, $date, $filename, $ext);
         else
-          $this->toTXT($data, $filename, $ext);
+          $this->toTXT($data, $date, $filename, $ext);
 
-        $f = $this->getpath().DS.$filename.'.'.$ext;
+        $f = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$filename.'.'.$ext;
         if (file_exists($f)) {
           $this->info($f.' - Hourly OK');
         } else {
@@ -379,6 +451,7 @@ class Eod extends Command
             $ds['hrly'][$h]['qty'] += $data['qty'];
             $ds['hrly'][$h]['sales'] += $data['netamt'];
           } else {
+  
             $ds['hrly'][$h]['qty'] = $data['qty'];
             $ds['hrly'][$h]['sales'] = $data['netamt'];
           }
@@ -395,7 +468,7 @@ class Eod extends Command
     }
   }
 
-  /*********************************************************** PRO ****************************************/
+  /*********************************************************** End: PRO ****************************************/
 
   public function associateAttributes($r) {
     $row = [];
