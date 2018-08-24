@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 class Eod extends Command
 {
-  protected $signature = 'eod {date : YYYY-MM-DD} {--ext=CSV : File Extension}';
+  protected $signature = 'eod {date : YYYY-MM-DD} {--lessorcode= : File Extension} {--ext=CSV : File Extension}';
   protected $description = 'Command description';
   private $excel;
   private $sysinfo;
@@ -37,12 +37,14 @@ class Eod extends Command
         exit;
       }
 
+      $lessorcode = $this->option('lessorcode');
+
       $date = Carbon::parse($date);
 
       $this->checkOrder();
       $this->checkCashAudit($date);
 
-      $this->generateEod($date, $ext);
+      $this->generateEod($date, $lessorcode, $ext);
   }
 
   private function getSysinfo($r) {
@@ -186,15 +188,20 @@ class Eod extends Command
     fclose($fp);
   }
 
-  private function generateEod(Carbon $date, $ext) {
-    $lessor = strtolower($this->sysinfo->lessorcode);
+
+
+  private function generateEod(Carbon $date, $lessor, $ext) {
+    $lessor = empty($lessor) 
+      ? strtolower($this->sysinfo->lessorcode)
+      : $lessor;
+
     if (empty($lessor))
       throw new Exception("Error: LESSORINFO on SYSINFO.DBF is empty."); 
     if (!in_array($lessor, $this->lessor))
       throw new Exception("Error: No lessor found."); 
 
-   if (!method_exists('\App\Console\Commands\Test', $lessor))
-      throw new Exception("Error: No method ".$lessor." on this Class."); 
+   //if (!method_exists('\App\Console\Commands\Test', $lessor))
+   //   throw new Exception("Error: No method ".$lessor." on this class."); 
 
     $this->info('Generating file for: '.$lessor.' '.$date->format('Y-m-d'));
 
@@ -204,10 +211,103 @@ class Eod extends Command
   /*********************************************************** AOL ****************************************/
   public function AOL(Carbon $date, $ext) {
     $c = $this->aolCharges($date);
+    //$this->info('this is AOL');
+    //$this->info(json_encode($c));
+    $this->aolDaily($date, $c);
   }
 
+  private function aolDaily(Carbon $date, $c) {
 
-  public function aolCharges(Carbon $date) {
+    $ext = str_pad($this->sysinfo->pos_no, 3, '0', STR_PAD_LEFT);
+    $filename = str_pad($this->sysinfo->zread_ctr, 4, '0', STR_PAD_LEFT).$date->format('md');
+   
+    //$this->info(' ');
+
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    if(!is_dir($dir))
+        mkdir($dir, 0775, true);
+    $file = $dir.DS.$filename.'.'.$ext;
+    $fp = fopen($file, 'w');
+
+
+    $data = [
+      str_pad('OUTLETSLIPA', 12, ' ', STR_PAD_LEFT),
+      str_pad(trim($this->sysinfo->tenantname), 12, ' ', STR_PAD_LEFT),
+      str_pad($ext, 12, ' ', STR_PAD_LEFT),
+      str_pad($date->format('Y-m-d'), 12, ' ', STR_PAD_LEFT),
+      str_pad(number_format($c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['vat'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      '000000000.00',
+      '000000000.00',
+      '000000000000',
+      '000000000.00',
+      '000000000000',
+      '000000000.00',
+      '000000000000',
+      str_pad(number_format($c['totdisc'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['disccnt'], 0,'.',''), 12, '0', STR_PAD_LEFT),
+      '000000000.00',
+      str_pad(number_format($c['sale_chrg'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['sale_cash'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      '000000000.00',
+      str_pad(number_format($this->sysinfo->zread_ctr-1, 0,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($this->sysinfo->grs_total-$c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($this->sysinfo->zread_ctr, 0,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($this->sysinfo->grs_total, 2,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['trancnt'], 0,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['begor'], 0,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['endor'], 0,'.',''), 12, '0', STR_PAD_LEFT),
+    ];
+
+    $final = [];
+
+    foreach ($data as $line => $value) {
+      //$this->info($value);
+      $sum = 0;
+
+      $ln = str_pad($line+1, 2, '0', STR_PAD_LEFT);
+      foreach (str_split($ln) as $key => $char)  {
+        $ascii = ord($char);
+        //$this->info($char.' = '.$ascii);
+        $sum += $ascii;
+      }
+
+      foreach (str_split($value) as $key => $char) {
+        $ascii = ord($char);
+        //$this->info($char.' = '.$ascii);
+        $sum += $ascii;
+      }
+     // $this->info('sum: '.$sum);
+      $mod = $sum % 10;
+      //$this->info('modulo: '.$mod);
+      $parity = $mod % 2;
+     //$this->info('parity: '.$parity);
+
+      $value = $ln.$mod.$parity.$value;
+      //$this->info('value: '.$value);
+      //$this->info($value);
+
+      $final[$line] = $value;
+
+      if (count($data)==($line+1))
+        fwrite($fp, $value);
+      else
+        fwrite($fp, $value.PHP_EOL);
+
+    }
+    fclose($fp);
+
+    //$this->info(' ');
+    if (file_exists($file)) {
+      $this->info($file.' - Daily OK');
+    } else {
+      $this->info($file.' - Error on generating');
+    }
+
+    return $final;
+  }
+
+  private function aolCharges(Carbon $date) {
     $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
     if (file_exists($dbf_file)) {
       $db = dbase_open($dbf_file, 0);
@@ -223,7 +323,7 @@ class Eod extends Command
       $ds['disccnt'] = 0;
       $ds['sale_cash'] = 0;
       $ds['sale_chrg'] = 0;
-      $ds['begdor'] = NULL;
+      $ds['begor'] = NULL;
       $ds['endor'] = NULL;
 
       for ($i=1; $i<=$record_numbers; $i++) {
@@ -243,22 +343,15 @@ class Eod extends Command
 
           $ds['grschrg']  += $data['tot_chrg'];
           $ds['vat']      += $data['vat'];
-          $ds['totdisc']  += ($data['promo_amt'] + $data['sr_disc'] + $data['oth_disc'] + $data['u_disc']);
-          if ($ds['totdisc']>0)
+          $disc = ($data['promo_amt'] + $data['sr_disc'] + $data['oth_disc'] + $data['u_disc']);
+          $ds['totdisc']  += $disc;
+          if ($disc>0)
             $ds['disccnt']++;
 
           if (strtolower($data['terms'])=='charge')
             $ds['sale_chrg'] += $data['tot_chrg'];
           else
             $ds['sale_cash'] += $data['tot_chrg'];
-
-
-          $h = substr($data['ordtime'], 0, 2);
-          if (array_key_exists($h, $ds['hrly']))
-            $ds['hrly'][$h] += $data['tot_chrg'];
-          else
-            $ds['hrly'][$h] = $data['tot_chrg'];
-
           
           $update++;
         }
