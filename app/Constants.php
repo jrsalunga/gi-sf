@@ -41,3 +41,10 @@ function alog($log, $logfile=NULL) {
   fwrite($handle, $content);
   fclose($handle);
 }
+
+
+
+function mdir($dir) {
+  if (!is_dir($dir))
+    return mkdir($dir, 0775, true);
+}

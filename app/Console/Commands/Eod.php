@@ -26,6 +26,7 @@ class Eod extends Command
   public function handle() {
 
       alog('Starting...');
+      //$this->info($this->sysinfo->trandate);
 
       $date = $this->argument('date');
       if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $date)) {
@@ -390,7 +391,7 @@ class Eod extends Command
 
   private function proDaily($date, $c, $s, $ext='CSV') {
 
-    $filename = substr($this->sysinfo->tenantname, 0, 3).$this->sysinfo->pos_no.$date->format('dmy');
+    $filename = substr($this->sysinfo->tenantname, 0, 3).($this->sysinfo->pos_no+0).$date->format('mdy');
 
     $data[0] = ['TRANDATE', 'OLDGT', 'NEWGT', 'DLYSALE', 'TOTDISC', 'TOTREF', 'TOTCAN', 'VAT', 'TENTNME', 'BEGINV', 'ENDINV', 'BEGOR', 'ENDOR', 'TRANCNT', 'TOTQTY', 'SALETAX', 'SERVCHARGE', 'NOTAXSALE', 'OTHERS1', 'OTHERS2', 'OTHERS3', 'TERMINUM'];
     $data[1] = [
@@ -436,6 +437,55 @@ class Eod extends Command
   }
 
   private function proHourly(Carbon $date, $s, $ext='CSV') {
+
+    if (count($s['hrly'])>0) {
+
+      $filename = substr($this->sysinfo->tenantname, 0, 3).($this->sysinfo->pos_no+0).$date->format('md').'H';
+
+      $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+      mdir($dir);
+      $file = $dir.DS.$filename.'.'.$ext;
+      $fp = fopen($file, 'w');
+
+      $header = ['TRANDATE', 'HOUR', 'SALES', 'QUANTITY SOLD', 'TENTNME', 'TERMNUM'];
+      if (strtolower($ext)=='csv')
+        fputcsv($fp, $header);
+      else
+        fwrite($fp, $header);
+      
+      foreach ($s['hrly'] as $key => $v) {
+
+        $data = [
+          $date->format('Ymd'), //TRANDATE
+          $key.':00', //HOUR
+          number_format($v['sales'], 2,'.',''), //SALES
+          number_format($v['qty'], 2,'.',''), //QUANTITY SOLD
+          $this->sysinfo->tenantname, //TENTNME
+          $this->sysinfo->pos_no //TERMINUM
+        ];
+
+        if (strtolower($ext)=='csv')
+          fputcsv($fp, $data);
+        else
+          fwrite($fp, $data);
+      }
+      fclose($fp);
+
+      $f = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$filename.'.'.$ext;
+      if (file_exists($f)) {
+        $this->info($f.' - Hourly OK');
+        alog($f.' - Hourly OK');
+      } else {
+        $this->info($f.' - Error on generating');
+        alog($f.' - Error on generating');
+      }
+
+
+    } else
+      $this->info('No sales record found on SALESMTD.DBF');
+  }
+
+  private function proHourlyOld(Carbon $date, $s, $ext='CSV') {
 
     if (count($s['hrly'])>0) {
       foreach ($s['hrly'] as $key => $v) {
