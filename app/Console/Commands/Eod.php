@@ -25,15 +25,19 @@ class Eod extends Command
 
   public function handle() {
 
+      alog('Starting...');
+
       $date = $this->argument('date');
       if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $date)) {
         $this->info('Invalid date.');
+        alog('Invalid date: '.$date);
         exit;
       }
 
       $ext = $this->option('ext');
       if (!in_array(strtolower($ext), ['txt', 'csv'])) {
         $this->info('Invalid file extension.');
+        alog('Invalid file extension: '.$ext);
         exit;
       }
 
@@ -188,21 +192,28 @@ class Eod extends Command
     fclose($fp);
   }
 
-
-
   private function generateEod(Carbon $date, $lessor, $ext) {
+    
     $lessor = empty($lessor) 
       ? strtolower($this->sysinfo->lessorcode)
       : $lessor;
-
-    if (empty($lessor))
+    
+    if (empty($lessor)) {
+      alog('Error: LESSORINFO on SYSINFO.DBF is empty.');
       throw new Exception("Error: LESSORINFO on SYSINFO.DBF is empty."); 
-    if (!in_array($lessor, $this->lessor))
+    }
+    
+    if (!in_array($lessor, $this->lessor)){
+      alog('Error: No lessor found.');
       throw new Exception("Error: No lessor found."); 
+    }
 
-   //if (!method_exists('\App\Console\Commands\Test', $lessor))
-   //   throw new Exception("Error: No method ".$lessor." on this class."); 
+    if (!method_exists('\App\Console\Commands\Eod', $lessor)) {
+      alog("Error: No method ".$lessor." on this Class.");
+      throw new Exception("Error: No method ".$lessor." on this Class."); 
+    }
 
+    alog('Generating file for: '.$lessor.' '.$date->format('Y-m-d'));
     $this->info('Generating file for: '.$lessor.' '.$date->format('Y-m-d'));
 
     $this->{$lessor}($date, $ext);
@@ -211,8 +222,6 @@ class Eod extends Command
   /*********************************************************** AOL ****************************************/
   public function AOL(Carbon $date, $ext) {
     $c = $this->aolCharges($date);
-    //$this->info('this is AOL');
-    //$this->info(json_encode($c));
     $this->aolDaily($date, $c);
   }
 
@@ -300,8 +309,10 @@ class Eod extends Command
     //$this->info(' ');
     if (file_exists($file)) {
       $this->info($file.' - Daily OK');
+      alog($file.' - Daily OK');
     } else {
       $this->info($file.' - Error on generating');
+      alog($file.' - Error on generating');
     }
 
     return $final;
@@ -415,9 +426,11 @@ class Eod extends Command
     $f = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$filename.'.'.$ext;
     if (file_exists($f)) {
       $this->info($f.' - Daily OK');
+      alog($f.' - Daily OK');
       return true;
     } else {
       $this->info($f.' - Error on generating');
+      alog($f.' - Error on generating');
       return false;
     }
   }
@@ -447,8 +460,10 @@ class Eod extends Command
         $f = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$filename.'.'.$ext;
         if (file_exists($f)) {
           $this->info($f.' - Hourly OK');
+          alog($f.' - Hourly OK');
         } else {
           $this->info($f.' - Error on generating');
+          alog($f.' - Error on generating');
         }
       }
     } else
