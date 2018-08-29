@@ -239,6 +239,10 @@ class Eod extends Command
     $file = $dir.DS.$filename.'.'.$ext;
     $fp = fopen($file, 'w');
 
+    $ctr = $this->sysinfo->zread_ctr>0
+      ? $this->sysinfo->zread_ctr-1
+      : 0;
+
 
     $data = [
       str_pad('OUTLETSLIPA', 12, ' ', STR_PAD_LEFT),
@@ -260,7 +264,7 @@ class Eod extends Command
       str_pad(number_format($c['sale_chrg'], 2,'.',''), 12, '0', STR_PAD_LEFT),
       str_pad(number_format($c['sale_cash'], 2,'.',''), 12, '0', STR_PAD_LEFT),
       '000000000.00',
-      str_pad(number_format($this->sysinfo->zread_ctr-1, 0,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($ctr, 0,'.',''), 12, '0', STR_PAD_LEFT),
       str_pad(number_format($this->sysinfo->grs_total-$c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT),
       str_pad(number_format($this->sysinfo->zread_ctr, 0,'.',''), 12, '0', STR_PAD_LEFT),
       str_pad(number_format($this->sysinfo->grs_total, 2,'.',''), 12, '0', STR_PAD_LEFT),
