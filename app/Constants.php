@@ -36,7 +36,7 @@ function alog($log, $logfile=NULL) {
 
   //$ip = clientIP();
   //$brw = $_SERVER['HTTP_USER_AGENT'];
-  $content = date('r')." | {$log} \n";
+  $content = date('r')." | {$log}".PHP_EOL;
   //$content = "{$log}\n";
   fwrite($handle, $content);
   fclose($handle);
