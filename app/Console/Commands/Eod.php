@@ -541,11 +541,12 @@ class Eod extends Command
 
           if ($data['dis_sr']>0) {
             $ds['eod']['srcnt'] += $data['sr_body'];
-            $non_tax_sale = ($data['vat_xmpt'] + $data['dis_sr']) / 0.285714286;
+            $m = $data['vat_xmpt'] + $data['dis_sr'];
+            $non_tax_sale = ($m / 0.285714286) - $m;
             $ds['eod']['vat_ex'] += $non_tax_sale;
           } else {
             $sale_tax = $data['chrg_grs'] / 1.12;
-            $ds['eod']['vat_in'] += $sale_tax;
+            
           }
 
           if ($data['dis_sr']>0) {
@@ -704,6 +705,7 @@ class Eod extends Command
         }
       }
       $ds['eod']['trancnt'] = $update;
+      $ds['eod']['vat_in'] = $ds['eod']['sale'] - $ds['eod']['vat_ex'];
       
       dbase_close($db);
       return $ds;
