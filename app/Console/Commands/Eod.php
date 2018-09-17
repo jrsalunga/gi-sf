@@ -740,32 +740,32 @@ class Eod extends Command
 
 
     $data = [
-      str_pad('OUTLETSLIPA', 12, ' ', STR_PAD_LEFT),
-      str_pad(trim($this->sysinfo->tenantname), 12, ' ', STR_PAD_LEFT),
-      str_pad($ext, 12, ' ', STR_PAD_LEFT),
-      str_pad($date->format('Y-m-d'), 12, ' ', STR_PAD_LEFT),
-      str_pad(number_format($c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT),
-      str_pad(number_format($c['vat'], 2,'.',''), 12, '0', STR_PAD_LEFT),
-      '000000000.00',
-      '000000000.00',
-      '000000000000',
-      '000000000.00',
-      '000000000000',
-      '000000000.00',
-      '000000000000',
-      str_pad(number_format($c['totdisc'], 2,'.',''), 12, '0', STR_PAD_LEFT),
-      str_pad(number_format($c['disccnt'], 0,'.',''), 12, '0', STR_PAD_LEFT),
-      '000000000.00',
-      str_pad(number_format($c['sale_chrg'], 2,'.',''), 12, '0', STR_PAD_LEFT),
-      str_pad(number_format($c['sale_cash'], 2,'.',''), 12, '0', STR_PAD_LEFT),
-      '000000000.00',
-      str_pad(number_format($ctr, 0,'.',''), 12, '0', STR_PAD_LEFT),
-      str_pad(number_format($this->sysinfo->grs_total-$c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT),
-      str_pad(number_format($this->sysinfo->zread_ctr, 0,'.',''), 12, '0', STR_PAD_LEFT),
-      str_pad(number_format($this->sysinfo->grs_total, 2,'.',''), 12, '0', STR_PAD_LEFT),
-      str_pad(number_format($c['trancnt'], 0,'.',''), 12, '0', STR_PAD_LEFT),
-      str_pad(number_format($c['begor'], 0,'.',''), 12, '0', STR_PAD_LEFT),
-      str_pad(number_format($c['endor'], 0,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad('OUTLETSLIPA', 12, ' ', STR_PAD_LEFT),  //1 mall id
+      str_pad(trim($this->sysinfo->tenantname), 12, ' ', STR_PAD_LEFT), //2 tenant id
+      str_pad($ext, 12, ' ', STR_PAD_LEFT), //3 // tenant no
+      str_pad($date->format('Y-m-d'), 12, ' ', STR_PAD_LEFT), //4 trans date
+      str_pad(number_format($c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT), //5 gross sales but tot charge/sales
+      str_pad(number_format($c['vat'], 2,'.',''), 12, '0', STR_PAD_LEFT), //6 
+      str_pad(number_format($c['vat_ex'], 2,'.',''), 12, '0', STR_PAD_LEFT), //7 non tax sales
+      '000000000.00', //8  void
+      '000000000000', //9   void cnt
+      str_pad(number_format($c['totdisc'], 2,'.',''), 12, '0', STR_PAD_LEFT), //10 discount
+      str_pad(number_format($c['disccnt'], 0,'.',''), 12, '0', STR_PAD_LEFT), //11 discount cnt
+      '000000000.00', //12 refund
+      '000000000000', //13 refund cnt
+      str_pad(number_format($c['sr_disc'], 2,'.',''), 12, '0', STR_PAD_LEFT), //14 Sr Discount
+      str_pad(number_format($c['sr_cnt'], 0,'.',''), 12, '0', STR_PAD_LEFT), //15 Sr Discount Cnt
+      '000000000.00', //16 svc charge
+      str_pad(number_format($c['sale_chrg'], 2,'.',''), 12, '0', STR_PAD_LEFT), //17 credit card sales
+      str_pad(number_format($c['sale_cash'], 2,'.',''), 12, '0', STR_PAD_LEFT), //18 cash sales
+      '000000000.00', //19 other sales
+      str_pad(number_format($ctr, 0,'.',''), 12, '0', STR_PAD_LEFT), //20 prev Eod Ctr
+      str_pad(number_format($this->sysinfo->grs_total, 2,'.',''), 12, '0', STR_PAD_LEFT), //21 Prev Grand Total
+      str_pad(number_format($this->sysinfo->zread_ctr, 0,'.',''), 12, '0', STR_PAD_LEFT), //22 Curr Eod Ctr
+      str_pad(number_format($this->sysinfo->grs_total+$c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT), //23 Curr Grand Total
+      str_pad(number_format($c['trancnt'], 0,'.',''), 12, '0', STR_PAD_LEFT), //24 No of Trans
+      str_pad(number_format($c['begor'], 0,'.',''), 12, '0', STR_PAD_LEFT), //25 Beg Rcpt
+      str_pad(number_format($c['endor'], 0,'.',''), 12, '0', STR_PAD_LEFT), //26 End Rcpt
     ];
 
     $final = [];
@@ -832,10 +832,13 @@ class Eod extends Command
       $ds['vat'] = 0;
       $ds['totdisc'] = 0;
       $ds['disccnt'] = 0;
+      $ds['sr_disc'] = 0;
+      $ds['sr_cnt'] = 0;
       $ds['sale_cash'] = 0;
       $ds['sale_chrg'] = 0;
       $ds['begor'] = NULL;
       $ds['endor'] = NULL;
+      $ds['vat_ex'] = 0;
 
       for ($i=1; $i<=$record_numbers; $i++) {
         $row = dbase_get_record_with_names($db, $i);
@@ -858,6 +861,17 @@ class Eod extends Command
           $ds['totdisc']  += $disc;
           if ($disc>0)
             $ds['disccnt']++;
+
+          if ($data['dis_sr']>0) {
+            $m = $data['vat_xmpt'] + $data['dis_sr'];
+            $non_tax_sale = ($m / 0.285714286) - $m;
+            $ds['vat_ex'] += $non_tax_sale;
+          } 
+
+          if ($data['dis_sr']>0) {
+              $ds['sr_disc'] += $data['dis_sr'];
+              $ds['sr_cnt'] ++;
+          }
 
           if (strtolower($data['terms'])=='charge')
             $ds['sale_chrg'] += $data['tot_chrg'];
