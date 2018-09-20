@@ -5,6 +5,7 @@ use stdClass;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Console\Command;
+use Spatie\ArrayToXml\ArrayToXml;
 
 class Eod extends Command
 {
@@ -45,7 +46,7 @@ class Eod extends Command
       }
       
 
-      $lessorcode = $this->option('lessorcode');
+      $lessorcode = strtolower($this->option('lessorcode'));
 
       $date = Carbon::parse($date);
 
@@ -723,8 +724,12 @@ class Eod extends Command
 
   private function aolDaily(Carbon $date, $c) {
 
+     $ctr = $this->sysinfo->zread_ctr>0
+      ? $this->sysinfo->zread_ctr+2
+      : 2;
+
     $ext = str_pad($this->sysinfo->pos_no, 3, '0', STR_PAD_LEFT);
-    $filename = str_pad($this->sysinfo->zread_ctr, 4, '0', STR_PAD_LEFT).$date->format('md');
+    $filename = str_pad($ctr, 4, '0', STR_PAD_LEFT).$date->format('md');
    
     //$this->info(' ');
 
@@ -734,9 +739,7 @@ class Eod extends Command
     $file = $dir.DS.$filename.'.'.$ext;
     $fp = fopen($file, 'w');
 
-    $ctr = $this->sysinfo->zread_ctr>0
-      ? $this->sysinfo->zread_ctr-1
-      : 0;
+   
 
 
     $data = [
@@ -759,9 +762,9 @@ class Eod extends Command
       str_pad(number_format($c['sale_chrg'], 2,'.',''), 12, '0', STR_PAD_LEFT), //17 credit card sales
       str_pad(number_format($c['sale_cash'], 2,'.',''), 12, '0', STR_PAD_LEFT), //18 cash sales
       '000000000.00', //19 other sales
-      str_pad(number_format($ctr, 0,'.',''), 12, '0', STR_PAD_LEFT), //20 prev Eod Ctr
+      str_pad(number_format($ctr-1, 0,'.',''), 12, '0', STR_PAD_LEFT), //20 prev Eod Ctr
       str_pad(number_format($this->sysinfo->grs_total, 2,'.',''), 12, '0', STR_PAD_LEFT), //21 Prev Grand Total
-      str_pad(number_format($this->sysinfo->zread_ctr, 0,'.',''), 12, '0', STR_PAD_LEFT), //22 Curr Eod Ctr
+      str_pad(number_format($ctr, 0,'.',''), 12, '0', STR_PAD_LEFT), //22 Curr Eod Ctr
       str_pad(number_format($this->sysinfo->grs_total+$c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT), //23 Curr Grand Total
       str_pad(number_format($c['trancnt'], 0,'.',''), 12, '0', STR_PAD_LEFT), //24 No of Trans
       str_pad(number_format($c['begor'], 0,'.',''), 12, '0', STR_PAD_LEFT), //25 Beg Rcpt
