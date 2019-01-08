@@ -7,9 +7,9 @@ use Exception;
 use Illuminate\Console\Command;
 use Spatie\ArrayToXml\ArrayToXml;
 
-class Eod extends Command
+class Receipt extends Command
 {
-  protected $signature = 'eod {date : YYYY-MM-DD} {--lessorcode= : File Extension} {--ext=csv : File Extension}';
+  protected $signature = 'receipt {cslipno : 000000} {--lessorcode= : File Extension} {--ext=csv : File Extension}';
   protected $description = 'Command description';
   private $excel;
   private $sysinfo;
@@ -29,10 +29,10 @@ class Eod extends Command
       alog('Starting...');
       //$this->info($this->sysinfo->trandate);
 
-      $date = $this->argument('date');
-      if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $date)) {
-        $this->info('Invalid date.');
-        alog('Invalid date: '.$date);
+      $cslipno = str_pad($this->argument('cslipno'), 6, "0", STR_PAD_LEFT);
+      if (!preg_match("/^[0-9]{1,6}$/", $cslipno)) {
+        $this->info('Invalid cslipno.');
+        alog('Invalid cslipno: '.$cslipno);
         exit;
       }
       
@@ -48,12 +48,7 @@ class Eod extends Command
 
       $lessorcode = strtolower($this->option('lessorcode'));
 
-      $date = Carbon::parse($date);
-
-      $this->checkOrder();
-      $this->checkCashAudit($date);
-
-      $this->generateEod($date, $lessorcode, $ext);
+      $this->generateReceipt($cslipno, $lessorcode, $ext);
   }
 
   private function getSysinfo($r) {
@@ -225,6 +220,34 @@ class Eod extends Command
     $this->info('Generating file for: '.$lessor.' '.$date->format('Y-m-d'));
 
     $this->{$lessor}($date, $ext);
+  }
+
+
+  private function generateReceipt($cslipno, $lessor, $ext) {
+    
+    $lessor = empty($lessor) 
+      ? strtolower($this->sysinfo->lessorcode)
+      : $lessor;
+    
+    if (empty($lessor)) {
+      alog('Error: LESSORINFO on SYSINFO.DBF is empty.');
+      throw new Exception("Error: LESSORINFO on SYSINFO.DBF is empty."); 
+    }
+    
+    if (!in_array($lessor, $this->lessor)){
+      alog('Error: No lessor found.');
+      throw new Exception("Error: No lessor found."); 
+    }
+
+    if (!method_exists('\App\Console\Commands\Receipt', $lessor)) {
+      alog("Error: No method ".$lessor." on this Class.");
+      throw new Exception("Error: No method ".$lessor." on this Class."); 
+    }
+
+    alog('Generating file for: '.$lessor.' '.$cslipno);
+    $this->info('Generating file for: '.$lessor.' '.$cslipno);
+
+    $this->{$lessor}($cslipno, $ext);
   }
 
   /*********************************************************** YIC ****************************************/
@@ -717,10 +740,10 @@ class Eod extends Command
   /*********************************************************** end: YIC ****************************************/
 
   /*********************************************************** AOL ****************************************/
-  public function AOL(Carbon $date, $ext) {
-    $c = $this->aolCharges($date);
+  public function AOL($cslipno, $ext) {
+    //$c = $this->aolCharges($cslipno);
     //$this->aolDaily($date, $c);
-    $this->aolDailyXml($date, $c);
+    $this->aolDailyXml($cslipno);
     
   }
 
@@ -812,8 +835,8 @@ class Eod extends Command
               //$items[$ctr]['disc'] = '0.00';
               //$items[$ctr]['senior'] = $sr_disc;
 
-              $net = $data['netamt'];//-$vat_exmp;//-($vat_exmp+$sr_disc);
-              $uprice = $data['uprice'];//-$vat_exmp;
+              $net = $data['netamt'];//($vat_exmp+$sr_disc);
+              $uprice = $data['uprice'];
               $taxtype = 0;
             } else {
               $sr_disc = 0;
@@ -872,7 +895,7 @@ class Eod extends Command
 
   }
 
-  private function aolGetTrans(Carbon $date) {
+  private function aolGetTrans($cslipno) {
     $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
     if (file_exists($dbf_file)) {
       $db = dbase_open($dbf_file, 0);
@@ -883,39 +906,46 @@ class Eod extends Command
       
       $arr = [];
       $arr['trx'] = [];
+      $arr['date'] = '';
       $arr['product'] = [];
-      $arr['balance'] = [];
       $inv = [];
-      $inv2 = [];
       $ctr = 0;
 
       for ($i=1; $i<=$record_numbers; $i++) {
         $row = dbase_get_record_with_names($db, $i);
-        try {
-          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
-        } catch(Exception $e) {
-          continue;
-        }
         
-        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+        if (trim($row['CSLIPNO'])==$cslipno) {
+
+          try {
+            $date = vfpdate_to_carbon(trim($row['ORDDATE']));
+          } catch(Exception $e) {
+            continue;
+          }
+
+          //$arr['date'] = $date->format('Ymd');
+
           $data = $this->associateAttributes($row);
 
           $cash = strtolower($data['terms'])=='cash' ? number_format($data['tot_chrg'], 2,'.','') : '0.00';
           $chrg = strtolower($data['terms'])=='charge' ? number_format($data['tot_chrg'], 2,'.','') : '0.00';
+          $date_for_sr_rcpt = $data['dis_sr']>0 ? $data['vfpdate']->addSecond() : $data['vfpdate'];
           $linesenior = $data['dis_sr']>0 ? 1 : 0;
+          $linedisc = $data['totdisc']>0 ? 1 : 0;
 
-          $arr['trx'][$ctr] = [
+          $arr['date'] =  $date_for_sr_rcpt;
+          $arr['trx'] = [
             'receiptno'     => $data['cslipno'],
+            'date'          => $date->format('Ymd'),
             'void'          => 0,
             'cash'          => $cash,
             'credit'        => $chrg,
             'charge'        => '0.00',
             'giftcheck'     => '0.00',
             'othertender'   => '0.00',
-            'linedisc'      => '0.00',
-            'linesenior'    => '0.00',
             //'linedisc'      => number_format($data['totdisc'], 2,'.',''),
+            'linedisc'      => '0.00',
             //'linesenior'    => number_format($data['dis_sr'], 2,'.',''),
+            'linesenior'    => '0.00',
             'evat'          => '0.00',
             'linepwd'       => '0.00',
             'linediplomat'  => '0.00',
@@ -940,27 +970,19 @@ class Eod extends Command
             'refund'        => '0.00',
             'taxrate'       => '12.00',
             'posted'        => $data['vfpdate']->format('YmdHis'),
-            'memo'          => ' ',
+            'memo'          => '',
           ];
 
           $disc_pct = $data['totdisc']>0 ? (($data['chrg_grs']-$data['totdisc'])/$data['chrg_grs']) : 0 ;
           $items = $this->aolGetItem($date, $data['cslipno'], $disc_pct);
 
           foreach ($items['prods'] as $key => $prod) {
-            if (!array_key_exists($key, $inv)) 
+            if (!array_key_exists($key, $inv)) {
               $inv[$key] = $prod;
+            }
           }
 
-          foreach ($items['items'] as $key => $prod) {
-            if (!array_key_exists($prod['sku'], $inv2)) 
-              $inv2[$prod['sku']] = ($prod['qty']+0);
-            else
-              $inv2[$prod['sku']] += ($prod['qty']+0);
-            
-          }
-
-
-          $arr['trx'][$ctr]['line'] = $items['items'];
+          $arr['trx']['line'] = $items['items'];
 
 
           $ctr++;
@@ -973,106 +995,43 @@ class Eod extends Command
         $ctr++;
       }
 
-      $ctr=0;
-      foreach ($inv2 as $k => $value) {
-        $arr['balance'][$ctr] = [
-          'sku' => $k,
-          'qty' => '-'.$value,
-          'sold' => $value,
-          'adjusted' => 0,
-        ];
-        $ctr++;
-      }
-
       return $arr;
     }
   }
 
-  private function aolDailyXml(Carbon $date, $c) {
+  private function aolDailyXml($cslipno) {
 
     $ctr = $this->sysinfo->zread_ctr>0
-      ? $this->sysinfo->zread_ctr+1
-      : 1;
+      ? $this->sysinfo->zread_ctr+2
+      : 2;
 
     $pos_no = str_pad($this->sysinfo->pos_no, 4, '0', STR_PAD_LEFT);
     $zread = '0000'.$ctr;
     $f_tenantid = trim($this->sysinfo->tenantname);
    
-    $filename = 'sales_'.$f_tenantid.'_'.$pos_no.'_'.$zread;
-
-    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
-    mdir($dir);
-    $file = $dir.DS.$filename.'.xml';
-    $json_file = $dir.DS.$filename.'.json';
 
     $id = [
       'tenantid'  => $f_tenantid,//19010883
       'key'       => 'ROWZWNLI',//'D15403MN',
       'tmid'      => $pos_no,
-      'doc'       => 'SALES_EOD'
+      'doc'       => 'SALES_PREEOD'
     ];
 
-    $prev = $this->aolGetPrev($date);
-    $sales = [
-      'date'              => $date->format('Ymd'),
-      'zcounter'          => $ctr,
-      'previousnrgt'      => number_format($this->sysinfo->grs_total, 2,'.',''),
-      'nrgt'              => number_format($this->sysinfo->grs_total+$c['sale'], 2,'.',''),
-      'previoustax'       => number_format($prev['prev_tax'], 2,'.',''),
-      'newtax'            => number_format($prev['prev_tax']+$c['vat'], 2,'.',''),
-      'previoustaxsale'   => number_format($prev['prev_vat_in'], 2,'.',''),
-      'newtaxsale'        => number_format($prev['prev_vat_in']+$c['taxsale'], 2,'.',''),
-      'previousnotaxsale' => number_format($prev['prev_vat_ex'], 2,'.',''),
-      'newnotaxsale'      => number_format($prev['prev_vat_ex']+$c['notaxsale'], 2,'.',''),
-      'opentime'          => $c['open'],
-      'closetime'         => $c['close'],
-      'gross'             => number_format($c['grschrg'], 2,'.',''),
-      'vat'               => number_format($c['vat'], 2,'.',''),
-      'localtax'          => '0.00',
-      'amusement'         => '0.00',
-      'taxsale'           => number_format($c['taxsale'], 2,'.',''),
-      'notaxsale'         => number_format($c['notaxsale'], 2,'.',''),
-      'zerosale'          => '0.00',
-      'void'              => '0.00',
-      'voidcnt'           => '0.00',
-      'disc'              => number_format($c['totdisc'], 2,'.',''),
-      'disccnt'           => number_format($c['disccnt'], 0,'.',''),
-      'refund'            => '0.00',
-      'refundcnt'         => '0',
-      'senior'            => number_format($c['sr_disc'], 2,'.',''),
-      'seniorcnt'         => number_format($c['sr_cnt'], 0,'.',''),
-      'pwd'               => '0.00',
-      'pwdcnt'            => '0',
-      'diplomat'          => '0.00',
-      'diplomatcnt'       => '0',
-      'service'           => '0.00',
-      'servicecnt'        => '0',
-      'receiptstart'      => $c['begor'],
-      'receiptend'        => $c['endor'],
-      'trxcnt'            => number_format($c['trancnt'], 0,'.',''),
-      'cash'              => number_format($c['sale_cash'], 2,'.',''),
-      'cashcnt'           => number_format($c['cnt_cash'], 0,'.',''),
-      'credit'            => number_format($c['sale_chrg'], 2,'.',''),
-      'creditcnt'         => number_format($c['cnt_chrg'], 0,'.',''),
-      'charge'            => '0.00',
-      'chargecnt'         => '0',
-      'giftcheck'         => '0.00',
-      'giftcheckcnt'      => '0',
-      'othertender'       => '0.00',
-      'othertendercnt'    => '0',
-    ];
-
-    $this->toJson($date, $sales);
+    $prods = [];
     
-    $trans = $this->aolGetTrans($date);
+    $trans = $this->aolGetTrans($cslipno);
 
+    $date = $trans['date'];
+
+    $filename = 'sales_preeod_'.$f_tenantid.'_'.$pos_no.'_'.$date->format('YmdHis');
+
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    mdir($dir);
+    $file = $dir.DS.$filename.'.xml';
+    
+    $sales['date'] = $date->format('Ymd');
     $sales['trx'] = $trans['trx'];
     $product['product'] = $trans['product'];
-
-
-    $this->aolInv($date, $trans);
-
-    //$this->info(print_r($sales));
 
     $root = [
       'id' => $id,
@@ -1094,51 +1053,6 @@ class Eod extends Command
       $this->info($file.' - Error on generating');
       alog($file.' - Error on generating');
     }
-  }
-
-  private function aolInv(Carbon $date, $trans) {
-
-    $tenantid = trim($this->sysinfo->tenantname);
-   
-    $filename = 'inv_'.$tenantid.'_'.$date->format('Ymd');
-
-    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
-    mdir($dir);
-    $file = $dir.DS.$filename.'.xml';
-
-    $id = [
-      'tenantid'  => $tenantid,//19010883
-      'key'       => 'ROWZWNLI',//'D15403MN',
-      'date'      => $date->format('Ymd'),
-      'doc'       => 'INVENTORY'
-    ];
-
-
-
-    $inventory['balance'] = $trans['balance'];
-    $prods['product'] = $trans['product'];
-
-    $root = [
-      'id' => $id,
-      'inventory' => $inventory,
-      'master' => $prods
-    ];
-
-    $result = ArrayToXml::convert($root);
-    $fp = fopen($file, 'w');
-
-    fwrite($fp, $result);
-
-    fclose($fp);
-
-    if (file_exists($file)) {
-      $this->info($file.' - Daily OK');
-      alog($file.' - Daily OK');
-    } else {
-      $this->info($file.' - Error on generating');
-      alog($file.' - Error on generating');
-    }
-
   }
 
   private function aolDaily(Carbon $date, $c) {
@@ -1240,7 +1154,7 @@ class Eod extends Command
     return $final;
   }
 
-  private function aolCharges(Carbon $date) {
+  private function aolCharges($cslipno) {
     $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
     if (file_exists($dbf_file)) {
       $db = dbase_open($dbf_file, 0);
@@ -1313,9 +1227,10 @@ class Eod extends Command
           }
 
 
+          $ds['grschrg']  += $data['chrg_grs'];
           $ds['sale']  += $data['tot_chrg'];
           
-          $disc = ($data['promo_amt'] + $data['oth_disc'] + $data['u_disc']);
+          $disc = ($data['promo_amt'] + $data['sr_disc'] + $data['oth_disc'] + $data['u_disc']);
           $ds['totdisc']  += $disc;
           if ($disc>0)
             $ds['disccnt']++;
@@ -1326,17 +1241,12 @@ class Eod extends Command
             $ds['vat_ex'] += $non_tax_sale;
           } 
 
-          $ds['trx_disc'] += 0;
-          $ds['notaxsale'] += 0;
           if ($data['dis_sr']>0) {
-            //$ds['trx_disc'] += $data['vat_xmpt'];
-            //$ds['taxsale'] += $data['chrg_grs']+$data['vat_xmpt'];
-            $ds['notaxsale'] += $data['tot_chrg'];
-            $ds['grschrg']  += $data['tot_chrg'];
+            $ds['trx_disc'] += $data['vat_xmpt'];
+            $ds['notaxsale'] += $data['chrg_grs'];
           } else {
-            $ds['grschrg']  += $data['tot_chrg'];
-            $ds['taxsale'] += $data['chrg_grs']-$ds['totdisc'];
-            $ds['taxincsale'] += $data['chrg_grs']-$ds['totdisc'];
+            $ds['taxsale'] += ($data['chrg_grs']-$data['vat']);
+            $ds['taxincsale'] += ($data['chrg_grs']-$data['vat']);
 
             $ds['vat']      += $data['vat'];
           }
