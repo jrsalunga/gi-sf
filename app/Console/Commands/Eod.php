@@ -22,6 +22,9 @@ class Eod extends Command
       $this->extracted_path = 'C:\\GI_GLO';
       $this->lessor = ['pro', 'aol', 'yic'];
       $this->path = 'C:\\EODFILES';
+      //$this->out = '\\\\192.168.1.50\\User0001L';
+      //$this->out = '\\\\192.168.1.5\\maindepot\\TEST_AOL';
+      $this->out = 'M:';
   }
 
   public function handle() {
@@ -1069,6 +1072,10 @@ class Eod extends Command
     $sales['trx'] = $trans['trx'];
     $product['product'] = $trans['product'];
 
+    foreach ($sales['trx'] as $key => $trx) {
+      //$this->info($trx['receiptno']);
+      $this->aolReceiptXml($trx['receiptno']);
+    }
 
     $this->aolInv($date, $trans);
 
@@ -1093,6 +1100,191 @@ class Eod extends Command
     } else {
       $this->info($file.' - Error on generating');
       alog($file.' - Error on generating');
+    }
+
+    $newfile = $this->out.DS.$filename.'.xml';
+
+    alog('Copying: '.$file.' - '.$newfile);
+    $this->info('Copying: '.$file.' - '.$newfile);
+    if (copy($file, $newfile)) {
+      $this->info($file.' - Success on copying');
+      alog($file.' - Success on copying');
+    } else {
+      $this->info($file.' - Error on copying');
+      alog($file.' - Error on copying');
+    }
+
+  }
+
+  private function aolReceiptXml($cslipno) {
+    $ctr = $this->sysinfo->zread_ctr>0
+      ? $this->sysinfo->zread_ctr+2
+      : 2;
+
+    $pos_no = str_pad($this->sysinfo->pos_no, 4, '0', STR_PAD_LEFT);
+    $zread = '0000'.$ctr;
+    $f_tenantid = trim($this->sysinfo->tenantname);
+   
+
+    $id = [
+      'tenantid'  => $f_tenantid,//19010883
+      'key'       => 'ROWZWNLI',//'D15403MN',
+      'tmid'      => $pos_no,
+      'doc'       => 'SALES_PREEOD'
+    ];
+
+    $prods = [];
+    
+    $trans = $this->aolGetTransReceipt($cslipno);
+
+    $date = $trans['date'];
+
+    $filename = 'sales_preeod_'.$f_tenantid.'_'.$pos_no.'_'.$date->format('YmdHis');
+
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    mdir($dir);
+    $file = $dir.DS.$filename.'.xml';
+    
+    $sales['date'] = $date->format('Ymd');
+    $sales['trx'] = $trans['trx'];
+    $product['product'] = $trans['product'];
+
+    $root = [
+      'id' => $id,
+      'sales' => $sales,
+      'master' => $product
+    ];
+
+    $result = ArrayToXml::convert($root);
+    $fp = fopen($file, 'w');
+
+    fwrite($fp, $result);
+
+    fclose($fp);
+
+    if (file_exists($file)) {
+      $this->info($file.' - Daily OK');
+      alog($file.' - Daily OK');
+    } else {
+      $this->info($file.' - Error on generating');
+      alog($file.' - Error on generating');
+    }
+
+    $newfile = $this->out.DS.$filename.'.xml';
+
+    $this->info('Copying: '.$file);
+    //$this->info($newfile);
+    alog('Copying: '.$file.' - '.$newfile);
+    if (copy($file, $newfile)) {
+      $this->info($file.' - OK');
+      alog($file.' - Success on copying');
+    } else {
+      $this->info($file.' - Error on copying');
+      alog($file.' - Error on copying');
+    }
+  }
+
+  private function aolGetTransReceipt($cslipno) {
+    $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
+    if (file_exists($dbf_file)) {
+      $db = dbase_open($dbf_file, 0);
+      
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);
+      $update = 0;
+      
+      $arr = [];
+      $arr['trx'] = [];
+      $arr['date'] = '';
+      $arr['product'] = [];
+      $inv = [];
+      $ctr = 0;
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+        
+        if (trim($row['CSLIPNO'])==$cslipno) {
+
+          try {
+            $date = vfpdate_to_carbon(trim($row['ORDDATE']));
+          } catch(Exception $e) {
+            continue;
+          }
+
+          //$arr['date'] = $date->format('Ymd');
+
+          $data = $this->associateAttributes($row);
+
+          $cash = strtolower($data['terms'])=='cash' ? number_format($data['tot_chrg'], 2,'.','') : '0.00';
+          $chrg = strtolower($data['terms'])=='charge' ? number_format($data['tot_chrg'], 2,'.','') : '0.00';
+          $date_for_sr_rcpt = $data['dis_sr']>0 ? $data['vfpdate']->addSecond() : $data['vfpdate'];
+          $linesenior = $data['dis_sr']>0 ? 1 : 0;
+          $linedisc = $data['totdisc']>0 ? 1 : 0;
+
+          $arr['date'] =  $date_for_sr_rcpt;
+          $arr['trx'] = [
+            'receiptno'     => $data['cslipno'],
+            'date'          => $date->format('Ymd'),
+            'void'          => 0,
+            'cash'          => $cash,
+            'credit'        => $chrg,
+            'charge'        => '0.00',
+            'giftcheck'     => '0.00',
+            'othertender'   => '0.00',
+            //'linedisc'      => number_format($data['totdisc'], 2,'.',''),
+            'linedisc'      => '0.00',
+            //'linesenior'    => number_format($data['dis_sr'], 2,'.',''),
+            'linesenior'    => '0.00',
+            'evat'          => '0.00',
+            'linepwd'       => '0.00',
+            'linediplomat'  => '0.00',
+            'subtotal'      => number_format($data['subtotal'], 2,'.',''),
+            'disc'          => number_format($data['totdisc'], 2,'.',''),
+            'senior'        => number_format($data['dis_sr'], 2,'.',''),
+            'pwd'           => '0.00',
+            'diplomat'      => '0.00',
+            'vat'           => number_format($data['aol_trx_vat'], 2,'.',''),
+            'exvat'         => '0.00',
+            'incvat'        => number_format($data['aol_trx_vat'], 2,'.',''),
+            'localtax'      => '0.00',
+            'amusement'     => '0.00',
+            'service'       => '0.00',
+            'taxsale'       => number_format($data['taxsale'], 2,'.',''),
+            'notaxsale'     => number_format($data['notaxsale'], 2,'.',''),
+            'taxexsale'     => number_format($data['taxexsale'], 2,'.',''),
+            'taxincsale'    => number_format($data['taxincsale'], 2,'.',''),
+            'zerosale'      => '0.00',
+            'customercount' => number_format($data['custcount'], 0,'.',''),
+            'gross'         => number_format($data['gross'], 2,'.',''),
+            'refund'        => '0.00',
+            'taxrate'       => '12.00',
+            'posted'        => $data['vfpdate']->format('YmdHis'),
+            'memo'          => '',
+          ];
+
+          $disc_pct = $data['totdisc']>0 ? (($data['chrg_grs']-$data['totdisc'])/$data['chrg_grs']) : 0 ;
+          $items = $this->aolGetItem($date, $data['cslipno'], $disc_pct);
+
+          foreach ($items['prods'] as $key => $prod) {
+            if (!array_key_exists($key, $inv)) {
+              $inv[$key] = $prod;
+            }
+          }
+
+          $arr['trx']['line'] = $items['items'];
+
+
+          $ctr++;
+        }
+      }
+
+      $ctr=0;
+      foreach ($inv as $k => $value) {
+        $arr['product'][$ctr] = $value;
+        $ctr++;
+      }
+
+      return $arr;
     }
   }
 

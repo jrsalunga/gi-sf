@@ -56,6 +56,21 @@ return [
             'engine' => null,
         ],
 
+        'mysql-live' => [
+            'driver'    => 'mysql',
+            'host'      => '192.168.1.5',
+            'port'      => '1686',
+            'database'  => 'boss',
+            'username'  => 'server-admin',
+            'password'  => 'b33rpr0m0',
+            'unix_socket' => '',
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+            'engine' => null,
+        ],
+
         'pgsql' => [
             'driver' => 'pgsql',
             'host' => env('DB_HOST', '127.0.0.1'),
