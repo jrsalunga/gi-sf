@@ -20,7 +20,7 @@ class Eod extends Command
       $this->excel = $excel;
       $this->sysinfo();
       $this->extracted_path = 'C:\\GI_GLO';
-      $this->lessor = ['pro', 'aol', 'yic'];
+      $this->lessor = ['pro', 'aol', 'yic', 'ocl'];
       $this->path = 'C:\\EODFILES';
       //$this->out = '\\\\192.168.1.50\\User0001L';
       //$this->out = '\\\\192.168.1.5\\maindepot\\TEST_AOL';
@@ -159,6 +159,10 @@ class Eod extends Command
     return $this->path;
   }
 
+  private function getStoragePath() {
+    return $this->path.DS.'storage'.DS.$this->sysinfo->gi_brcode;
+  }
+
   private function toCSV($data, $date, $filename=NULL, $ext='CSV', $path=NULL) {
 
     $file = is_null($filename)
@@ -233,6 +237,230 @@ class Eod extends Command
 
     $this->{$lessor}($date, $ext);
   }
+
+
+  /*********************************************************** OCL ****************************************/
+  public function OCL(Carbon $date, $ext) {
+    $c = $this->oclCharges($date);
+    $this->oclDaily($date, $c, $ext);
+    //$this->oclHourly($date, $c, $ext);
+  }
+
+  private function oclDaily($date, $c, $ext) {
+
+    $ext = $this->sysinfo->zread_ctr>0
+      ? $this->sysinfo->zread_ctr
+      : 1;
+
+    $filename = 'D'.substr($this->sysinfo->tenantname, 0, 5).'0'.($this->sysinfo->pos_no+0).$date->format('mdY');
+
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
+    if(!is_dir($dir))
+        mkdir($dir, 0775, true);
+    $file = $dir.DS.$filename.'.'.$ext;
+    $fp = fopen($file, 'w');
+
+    $data = $this->oclDailyData($date, $c);
+
+    foreach ($data as $line => $value) {
+      //$this->info($value);
+      $sum = 0;
+
+      $ln = str_pad($line+1, 2, '0', STR_PAD_LEFT);
+     
+
+      $value = $ln.' '.$value;
+      $this->info('value: '.$value);
+      //$this->info($value);
+
+      if (count($data)==($line+1))
+        fwrite($fp, $value);
+      else
+        fwrite($fp, $value.PHP_EOL);
+
+    }
+
+
+    fclose($fp);
+
+    if (file_exists($file)) {
+      $this->info($file.' - Daily OK');
+      alog($file.' - Daily OK');
+    } else {
+      $this->info($file.' - Error on generating');
+      alog($file.' - Error on generating');
+    }
+
+  }
+
+  private function oclDailyData($date, $c) {
+    return [
+      trim(substr($this->sysinfo->tenantname, 0, 5)), //1 tenant code
+      '0'.($this->sysinfo->pos_no+0), // 2 terminal no
+      $date->format('mdY'), //3 trans date
+      number_format($this->sysinfo->grs_total, 2,'.',''), // 4 old gt
+      number_format($this->sysinfo->grs_total+$c['sale'], 2,'.',''), //5 new gt
+      number_format($c['sale'], 2,'.',''),
+      number_format($c['grschrg'], 2,'.',''),
+
+      /*
+      str_pad($ext, 12, ' ', STR_PAD_LEFT), //3 // tenant no
+      str_pad(number_format($c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT), //5 gross sales but tot charge/sales
+      str_pad(number_format($c['vat'], 2,'.',''), 12, '0', STR_PAD_LEFT), //6 
+      str_pad(number_format($c['vat_ex'], 2,'.',''), 12, '0', STR_PAD_LEFT), //7 non tax sales
+      '000000000.00', //8  void
+      '000000000000', //9   void cnt
+      str_pad(number_format($c['totdisc'], 2,'.',''), 12, '0', STR_PAD_LEFT), //10 discount
+      str_pad(number_format($c['disccnt'], 0,'.',''), 12, '0', STR_PAD_LEFT), //11 discount cnt
+      '000000000.00', //12 refund
+      '000000000000', //13 refund cnt
+      str_pad(number_format($c['sr_disc'], 2,'.',''), 12, '0', STR_PAD_LEFT), //14 Sr Discount
+      str_pad(number_format($c['sr_cnt'], 0,'.',''), 12, '0', STR_PAD_LEFT), //15 Sr Discount Cnt
+      '000000000.00', //16 svc charge
+      str_pad(number_format($c['sale_chrg'], 2,'.',''), 12, '0', STR_PAD_LEFT), //17 credit card sales
+      str_pad(number_format($c['sale_cash'], 2,'.',''), 12, '0', STR_PAD_LEFT), //18 cash sales
+      '000000000.00', //19 other sales
+      str_pad(number_format($ctr-1, 0,'.',''), 12, '0', STR_PAD_LEFT), //20 prev Eod Ctr
+      str_pad(number_format($this->sysinfo->grs_total, 2,'.',''), 12, '0', STR_PAD_LEFT), //21 Prev Grand Total
+      str_pad(number_format($ctr, 0,'.',''), 12, '0', STR_PAD_LEFT), //22 Curr Eod Ctr
+      str_pad(number_format($this->sysinfo->grs_total+$c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT), //23 Curr Grand Total
+      str_pad(number_format($c['trancnt'], 0,'.',''), 12, '0', STR_PAD_LEFT), //24 No of Trans
+      str_pad(number_format($c['begor'], 0,'.',''), 12, '0', STR_PAD_LEFT), //25 Beg Rcpt
+      str_pad(number_format($c['endor'], 0,'.',''), 12, '0', STR_PAD_LEFT), //26 End Rcpt
+      */
+    ];
+  }
+
+  private function oclCharges(Carbon $date) {
+    $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
+    if (file_exists($dbf_file)) {
+      $db = dbase_open($dbf_file, 0);
+      
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);
+      $update = 0;
+      
+      $ds = [];
+      $ds['grschrg'] = 0;
+      $ds['sale'] = 0;
+      $ds['vat'] = 0;
+      $ds['totdisc'] = 0;
+      $ds['disccnt'] = 0;
+      $ds['sr_disc'] = 0;
+      $ds['sr_cnt'] = 0;
+      $ds['cust'] = 0;
+      $ds['sale_cash'] = 0;
+      $ds['sale_chrg'] = 0;
+      $ds['begor'] = NULL;
+      $ds['endor'] = NULL;
+      $ds['vat_in'] = 0; //tax sale
+      $ds['vat_ex'] = 0; //no tax sale
+      $ds['cnt_cash'] = 0;
+      $ds['cnt_chrg'] = 0;
+      $ds['trx_disc'] = 0;
+      $ds['taxsale'] = 0;
+      $ds['notaxsale'] = 0;
+      $ds['taxexsale'] = 0;
+      $ds['taxincsale'] = 0;
+      $ds['trx_disc'] = 0;
+      $ds['open'] = '';
+      $ds['close'] = '';
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
+        } catch(Exception $e) {
+          continue;
+        }
+        
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+          $data = $this->associateAttributes($row);
+
+          if (is_null($ds['begor'])) {
+            $ds['begor'] = $data['cslipno'];
+            try {
+              $ds['open'] = Carbon::parse($data['orddate'].' '.$data['ordtime'])->format('YmdHis');
+            } catch (Exception $e) {
+              $ds['open'] = $data['orddate'].' '.$data['ordtime'];
+            }
+          }
+          $ds['endor'] = $data['cslipno'];
+          try {
+            $ds['close'] = Carbon::parse($data['orddate'].' '.$data['ordtime'])->format('YmdHis');
+          } catch (Exception $e) {
+            $ds['close'] = $data['orddate'].' '.$data['ordtime'];
+          }
+
+          switch (strtolower($data['terms'])) {
+            case 'cash':
+              $ds['cnt_cash']++;
+              break;
+            case 'charge':
+              $ds['cnt_chrg']++;
+              break;
+            default:
+              break;
+          }
+
+
+          $ds['grschrg']  += $data['chrg_grs'];
+          $ds['sale']  += $data['tot_chrg'];
+          
+          $disc = ($data['promo_amt'] + $data['oth_disc'] + $data['u_disc']);
+          $ds['totdisc']  += $disc;
+          if ($disc>0)
+            $ds['disccnt']++;
+
+          if ($data['dis_sr']>0) {
+            $m = $data['vat_xmpt'] + $data['dis_sr'];
+            $non_tax_sale = ($m / 0.285714286) - $m;
+            $ds['vat_ex'] += $non_tax_sale;
+          } 
+
+          $ds['trx_disc'] += 0;
+          $ds['notaxsale'] += 0;
+          if ($data['dis_sr']>0) {
+            //$ds['trx_disc'] += $data['vat_xmpt'];
+            //$ds['taxsale'] += $data['chrg_grs']+$data['vat_xmpt'];
+            $ds['notaxsale'] += $data['tot_chrg'];
+          } else {
+            $ds['taxsale'] += $data['chrg_grs']-$ds['totdisc'];
+            $ds['taxincsale'] += $data['chrg_grs']-$ds['totdisc'];
+
+            $ds['vat']      += $data['vat'];
+          }
+
+          if ($data['dis_sr']>0) {
+              $ds['sr_disc'] += $data['dis_sr'];
+              $ds['sr_cnt'] ++;
+          }
+
+          if ($data['dis_sr']>0 && $data['sr_body']!=$data['sr_tcust']) {
+            // dont compute cust
+          } else {
+            $ds['cust']  += ($data['sr_body'] + $data['sr_tcust']);
+          }
+
+          if (strtolower($data['terms'])=='charge')
+            $ds['sale_chrg'] += $data['tot_chrg'];
+          else
+            $ds['sale_cash'] += $data['tot_chrg'];
+          
+          $update++;
+        }
+      }
+      $ds['vat_in'] = $ds['grschrg'] - $ds['vat_ex'];
+      $ds['trancnt'] = $update;
+      
+      dbase_close($db);
+      return $ds;
+    } else {
+      throw new Exception("Cannot locate CHARGES.DBF"); 
+    }
+  }
+
+  /*********************************************************** end: OCL ****************************************/
 
   /*********************************************************** YIC ****************************************/
   public function YIC(Carbon $date, $ext) {
@@ -739,7 +967,7 @@ class Eod extends Command
   private function toJson($date, $data) {
 
     $filename = $date->format('Ymd');
-    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    $dir = $this->getStoragePath().DS.$date->format('Y').DS.$date->format('m');
     mdir($dir);
     $file = $dir.DS.$filename.'.json';
 
@@ -762,7 +990,7 @@ class Eod extends Command
 
   private function aolGetPrev(Carbon $date) {
     $filename = $date->copy()->subDay()->format('Ymd');
-    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    $dir = $this->getStoragePath().DS.$date->format('Y').DS.$date->format('m');
     $file = $dir.DS.$filename.'.json';
     alog('Getting previous data - OK');
     $a = [];
@@ -1015,7 +1243,6 @@ class Eod extends Command
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
     mdir($dir);
     $file = $dir.DS.$filename.'.xml';
-    $json_file = $dir.DS.$filename.'.json';
 
     $id = [
       'tenantid'  => $f_tenantid,//19010883
@@ -1024,8 +1251,9 @@ class Eod extends Command
       'doc'       => 'SALES_EOD'
     ];
 
-    $prev = $this->aolGetPrev($date);
-    $sales = $this->aolGenHeader($c, $prev);
+    
+    
+    $sales = $this->aolGenHeader($date, $c, $ctr);
 
     $this->toJson($date, $sales);
     
@@ -1060,7 +1288,8 @@ class Eod extends Command
 
   }
 
-  private function aolGenHeader($c, $prev) {
+  private function aolGenHeader($date, $c, $ctr) {
+    $prev = $this->aolGetPrev($date);
     return [
       'date'              => $date->format('Ymd'),
       'zcounter'          => $ctr,

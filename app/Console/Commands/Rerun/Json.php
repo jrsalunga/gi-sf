@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Storage;
 class Json extends Command 
 {
     
-  protected $signature = 'rerun:json';
+  protected $signature = 'rerun:json  {lessorcode : XXX}';
 
     
   private $excel;
@@ -23,7 +23,7 @@ class Json extends Command
       $this->excel = $excel;
       $this->sysinfo();
       $this->extracted_path = 'C:\\GI_GLO';
-      $this->lessor = ['pro', 'aol', 'yic'];
+      $this->lessor = ['pro', 'aol', 'yic', 'ghl'];
       $this->path = 'C:\\EODFILES';
   }
 
@@ -76,7 +76,33 @@ class Json extends Command
     } 
     exit;
     */
+
+    $lessorcode = strtolower($this->argument('lessorcode'));
+    if (!in_array($lessorcode, $this->lessor)) {
+      $this->info('Invalid lessorcode.');
+      alog('Invalid lessorcode: '.$lessorcode);
+      exit;
+    }
+
+
+    switch ($lessorcode) {
+      case 'aol':
+        $this->aol();
+        break;
+      case 'ghl':
+        $this->ghl();
+        break;
+      default:
+        $this->info('No function on this lessor.');
+        break;
+    }
     
+    
+
+      
+  }
+
+  private function aol() {
     $this->info('json');
     $charges =  Charges::where('branch_id', '11e8918f1c1b0d85a7e09189291ab1b9')
                       ->where('terms', '<>', 'SIGNED')
@@ -157,7 +183,10 @@ class Json extends Command
       //$this->info($ctr);
     }
 
-
+    $previousnrgt = 0;
+    $previoustax = 0;
+    $previoustaxsale = 0;
+    $previousnotaxsale = 0;
     foreach ($sales as $key => $ds) {
       //$this->info($key.' '.$ds['date']->format('Y-m-d').' '.$ds['sales'].' '.$ds['gross'].' '.$ds['taxsale'].' '.$ds['vat'].' '.$ds['notaxsale']);
       $data = [];
@@ -167,24 +196,29 @@ class Json extends Command
         $prev = $key - 1;
 
         $data = [
-          'date'            => $ds['date']->format('Ymd'),
-          'zcounter'        => ($key+1),
-          'previousnrgt'    => $sales[$prev]['sales'],
-          'nrgt'            => ($sales[$prev]['sales']+$ds['sales']),
-          'previoustax'     => $sales[$prev]['vat'],
-          'newtax'          => ($sales[$prev]['vat']+$ds['vat']),
-          'previoustaxsale' => $sales[$prev]['taxsale'],
-          'newtaxsale'      => ($sales[$prev]['taxsale']+$ds['taxsale']),
-          'previousnotaxsale' => $sales[$prev]['notaxsale'],
-          'newnotaxsale'      => ($sales[$prev]['notaxsale']+$ds['notaxsale']),
+          'date'              => $ds['date']->format('Ymd'),
+          'zcounter'          => ($key+1),
+          'previousnrgt'      => $previousnrgt,
+          'nrgt'              => ($previousnrgt+$ds['sales']),
+          'previoustax'       => $previoustax,
+          'newtax'            => ($previoustax+$ds['vat']),
+          'previoustaxsale'   => $previoustaxsale,
+          'newtaxsale'        => ($previoustaxsale+$ds['taxsale']),
+          'previousnotaxsale' => $previousnotaxsale,
+          'newnotaxsale'      => ($previousnotaxsale+$ds['notaxsale']),
         ];
 
+        $previousnrgt += $ds['sales'];
+        $previoustax += $ds['vat'];
+        $previoustaxsale += $ds['taxsale'];
+        $previousnotaxsale += $ds['notaxsale'];
+
+        //$this->info($key.' '.$ds['date']->format('Y-m-d').' '.$ds['sales'].' '.$data['previousnrgt'].' '.$data['nrgt']);
+        //$this->info($key.' '.$ds['date']->format('Y-m-d').' '.$ds['sales'].' '.$ds['gross'].' '.$data['previousnrgt'].' '.$data['nrgt']);
 
         $this->toJson($ds['date'], $data);
       }
     }
-
-      
   }
 
 
@@ -199,7 +233,7 @@ class Json extends Command
   private function toJson($date, $data) {
 
     $filename = $date->format('Ymd');
-    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    $dir = $this->getStoragePath().DS.$date->format('Y').DS.$date->format('m');
     mdir($dir);
     $file = $dir.DS.$filename.'.json';
 
@@ -222,6 +256,10 @@ class Json extends Command
     if (starts_with($this->sysinfo->txt_path, 'C:\\'))
       return $this->sysinfo->txt_path;
     return $this->path;
+  }
+
+  private function getStoragePath() {
+    return $this->path.DS.'storage'.DS.$this->sysinfo->gi_brcode;
   }
 
   private function getSysinfo($r) {
