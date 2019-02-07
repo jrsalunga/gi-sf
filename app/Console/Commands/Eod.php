@@ -1241,10 +1241,21 @@ class Eod extends Command
   }
 
   private function aolGetPrev(Carbon $date) {
-    $filename = $date->copy()->subDay()->format('Ymd');
-    $dir = $this->getStoragePath().DS.$date->format('Y').DS.$date->format('m');
+    $prev_date = $date->copy()->subDay();
+    $filename = $prev_date->format('Ymd');
+    $dir = $this->getStoragePath().DS.$prev_date->format('Y').DS.$prev_date->format('m');
     $file = $dir.DS.$filename.'.json';
-    alog('Getting previous data - OK');
+    alog('Getting previous data');
+
+    if (file_exists($file)) {
+      $this->info('OK - File: '.$file);
+      alog('OK - File: '.$file);
+    } else {
+      $this->info('ERROR - File not exist: '.$file);
+      alog('Error - File not exist: '.$file);
+    }
+
+
     $a = [];
     $a['prev_gt'] = 0;
     $a['prev_tax'] = 0;
