@@ -18,9 +18,18 @@ function is_time($time){
 }
 
 function alog($log, $logfile=NULL) {
+
+  $now = Carbon\Carbon::now();
+  $reset = Carbon\Carbon::parse($now->format('Y-m-d').' 06:00:00');
+
+  $logdate = $now->gte($reset) 
+    ? $now->format('Ymd')
+    : $now->copy()->subDay()->format('Ymd');
+
+
   $logfile = !is_null($logfile) 
     ? $logfile
-    : 'C:\\EODFILES'.DS.'logs'.DS.'activity.log';
+    : 'C:\\EODFILES'.DS.'logs'.DS.$logdate.'-activity.log';
 
   $dir = pathinfo($logfile, PATHINFO_DIRNAME);
 

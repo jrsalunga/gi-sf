@@ -259,7 +259,7 @@ class Json extends Command
   }
 
   private function getStoragePath() {
-    return $this->path.DS.'storage'.DS.$this->sysinfo->gi_brcode;
+    return $this->path.DS.'STORAGE'.DS.$this->sysinfo->gi_brcode;
   }
 
   private function getSysinfo($r) {
