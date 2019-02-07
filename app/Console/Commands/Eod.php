@@ -1503,7 +1503,7 @@ class Eod extends Command
    
     $filename = 'sales_'.$f_tenantid.'_'.$pos_no.'_'.$zread;
 
-    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
     mdir($dir);
     $file = $dir.DS.$filename.'.xml';
 
@@ -1627,7 +1627,7 @@ class Eod extends Command
 
     $filename = 'sales_preeod_'.$f_tenantid.'_'.$pos_no.'_'.$date->format('YmdHis');
 
-    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
     mdir($dir);
     $file = $dir.DS.$filename.'.xml';
     
@@ -1763,7 +1763,7 @@ class Eod extends Command
    
     $filename = 'inv_'.$tenantid.'_'.$date->format('Ymd');
 
-    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
     mdir($dir);
     $file = $dir.DS.$filename.'.xml';
 
