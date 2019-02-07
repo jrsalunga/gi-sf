@@ -1240,6 +1240,16 @@ class Eod extends Command
     }
   }
 
+  private function getJsonData(Carbon $date) {
+    $dir = $this->getStoragePath().DS.$date->format('Y').DS.$date->format('m');
+    $filename = $date->format('Ymd');
+    $file = $dir.DS.$filename.'.json';
+
+    if (file_exists($file)) 
+      return json_decode(file_get_contents($file), true);
+    return NULL;
+  }
+
   private function aolGetPrev(Carbon $date) {
     $prev_date = $date->copy()->subDay();
     $filename = $prev_date->format('Ymd');
@@ -1492,11 +1502,14 @@ class Eod extends Command
   }
 
   private function aolDailyXml(Carbon $date, $c) {
-
+    
+    $j = $this->getJsonData($date);
+    $ctr = is_null($j) ? 1 : $j['zcounter'];
+    /*
     $ctr = $this->sysinfo->zread_ctr>0
       ? $this->sysinfo->zread_ctr+1
       : 1;
-
+    */
     $pos_no = str_pad($this->sysinfo->pos_no, 4, '0', STR_PAD_LEFT);
     $zread = str_pad($ctr, 5, '0', STR_PAD_LEFT);//'0000'.$ctr;
     $f_tenantid = trim($this->sysinfo->tenantname);
@@ -1608,7 +1621,6 @@ class Eod extends Command
       : 2;
 
     $pos_no = str_pad($this->sysinfo->pos_no, 4, '0', STR_PAD_LEFT);
-    $zread = '0000'.$ctr;
     $f_tenantid = trim($this->sysinfo->tenantname);
    
 
