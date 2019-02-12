@@ -197,7 +197,7 @@ class Json extends Command
 
         $data = [
           'date'              => $ds['date']->format('Ymd'),
-          'zcounter'          => ($key+1),
+          'zcounter'          => ($key+2),
           'previousnrgt'      => $previousnrgt,
           'nrgt'              => ($previousnrgt+$ds['sales']),
           'previoustax'       => $previoustax,

@@ -692,6 +692,26 @@ class Eod extends Command
       fputcsv($fp, $header);
     else
       fwrite($fp, $header);
+
+    $rc = ['RFND', 'CNCLD'];
+
+    foreach ($rc as $key => $value) {
+      $data = [
+        $date->format('Y-m-d'), 
+        substr($this->sysinfo->tenantcode, 0, 3),
+        $value, 
+        '', 
+        '0.000',
+        0,
+        0,
+        0,
+      ];
+
+      if (strtolower($ext)=='csv')
+        fputcsv($fp, $data);
+      else
+        fwrite($fp, $data);
+    }
     
     fclose($fp);
 
@@ -769,11 +789,11 @@ class Eod extends Command
         $data = [
           $date->format('Y-m-d'), //TRANDATE
           substr($this->sysinfo->tenantcode, 0, 3),
-          strtoupper($key), //PymntCd
-          '', //PymntDsc
-          '', //PymntCdCLSCd
-          '', //PymntCdCLSDsc
-          number_format($v, 2,'.',''), //QUANTITY SOLD
+          $key=='card' ? 'CRD':'CSH', //PymntCd
+          strtoupper($key), //PymntDsc
+          $key=='card' ? 'CRD':'CSH', //PymntCdCLSCd
+          strtoupper($key).' PAYMENT', //PymntCdCLSDsc
+          number_format($v, 4,'.',''), //QUANTITY SOLD
         ];
 
         if (strtolower($ext)=='csv')
@@ -866,36 +886,36 @@ class Eod extends Command
       $date->format('Y-m-d'), //DteTrnsctn
       substr($this->sysinfo->tenantcode, 0, 3), //MrchntCd
       substr(trim($this->sysinfo->tenantname), 0, 50), //MrchntDsc
-      number_format($this->sysinfo->grs_total, 2,'.',''), //GrndTtlOld
-      number_format($this->sysinfo->grs_total + $c['eod']['sale'], 2,'.',''), //GrndTtlNew
-      number_format($c['eod']['sale'], 2,'.',''), //GTDlySls
-      number_format($c['eod']['totdisc'], 2,'.',''), //GTDscnt
-      number_format($c['eod']['dis_sr'], 2,'.',''), //GTDscntSNR
-      number_format($c['eod']['dis_pwd'], 2,'.',''),
-      number_format($c['eod']['dis_gpc'], 2,'.',''),
-      number_format($c['eod']['dis_vip'], 2,'.',''),
-      number_format($c['eod']['dis_emp'], 2,'.',''),
-      number_format($c['eod']['dis_prom'], 2,'.',''),
-      number_format($c['eod']['dis_udisc'], 2,'.',''),
-      0.00, //TOTREF
-      0.00, //TOTCAN
-      number_format($c['eod']['vat'], 2,'.',''),  // VAT
-      number_format($c['eod']['vat_in'], 2,'.',''), //GTVATSlsInclsv
-      number_format($c['eod']['vat_ex'], 2,'.',''), //GTVATSlsExclsv
+      number_format($this->sysinfo->grs_total, 4,'.',''), //GrndTtlOld
+      number_format($this->sysinfo->grs_total + $c['eod']['sale'], 4,'.',''), //GrndTtlNew
+      number_format($c['eod']['sale'], 4,'.',''), //GTDlySls
+      number_format($c['eod']['totdisc'], 4,'.',''), //GTDscnt
+      number_format($c['eod']['dis_sr'], 4,'.',''), //GTDscntSNR
+      number_format($c['eod']['dis_pwd'], 4,'.',''),
+      number_format($c['eod']['dis_gpc'], 4,'.',''),
+      number_format($c['eod']['dis_vip'], 4,'.',''),
+      number_format($c['eod']['dis_emp'], 4,'.',''),
+      number_format($c['eod']['dis_prom'], 4,'.',''),
+      number_format($c['eod']['dis_udisc'], 4,'.',''),
+      number_format(0 , 4,'.',''), //TOTREF
+      number_format(0 , 4,'.',''), //TOTCAN
+      number_format($c['eod']['vat'], 4,'.',''),  // VAT
+      number_format($c['eod']['vat_in'], 4,'.',''), //GTVATSlsInclsv
+      number_format($c['eod']['vat_ex'], 4,'.',''), //GTVATSlsExclsv
       $c['eod']['begor'],  //BEGINV
       $c['eod']['endor'], //ENDINV
       $c['eod']['trancnt'], //TRANCNT
       $c['eod']['cust'], //TOTQTY
       $c['eod']['srcnt'], //TOTQTY
-      0.00, //GTLclTax
-      0.00, //GTSrvcChrg
-      0.00, //GTSlsNonVat
-      $c['eod']['grschrg'], //GTRwGrss
-      0.00, //GtLclTaxDly
+      number_format(0 , 4,'.',''), //GTLclTax
+      number_format(0 , 4,'.',''), //GTSrvcChrg
+      number_format(0 , 4,'.',''), //GTSlsNonVat
+      number_format($c['eod']['grschrg'], 4,'.',''), //GTRwGrss
+      number_format(0 , 4,'.',''), //GtLclTaxDly
       ($this->sysinfo->pos_no+0), //TERMINUM
-      number_format($c['eod']['sale_cash'], 2,'.',''),
-      number_format($c['eod']['sale_chrg'], 2,'.',''),
-      0.00, //GTPymntOTH
+      number_format($c['eod']['sale_cash'], 4,'.',''),
+      number_format($c['eod']['sale_chrg'], 4,'.',''),
+      number_format(0 , 4,'.',''), //GTPymntOTH
     ];
 
     if (strtolower($ext)=='csv')
@@ -1266,7 +1286,8 @@ class Eod extends Command
     }
 
 
-    $a = [];
+    $a['zcounter'] = 0;
+    $a['prev_gt'] = 0;
     $a['prev_gt'] = 0;
     $a['prev_tax'] = 0;
     $a['prev_vat_in'] = 0;
@@ -1279,6 +1300,8 @@ class Eod extends Command
       $a['prev_tax'] = $json['newtax'];
       $a['prev_vat_in'] = $json['newtaxsale'];
       $a['prev_vat_ex'] = $json['newnotaxsale'];
+      
+      $a['zcounter'] = $json['zcounter'];
     } else {
       alog($file.' not found!');
     }
@@ -1504,12 +1527,17 @@ class Eod extends Command
   private function aolDailyXml(Carbon $date, $c) {
     
     $j = $this->getJsonData($date);
-    $ctr = is_null($j) ? 1 : $j['zcounter'];
-    /*
-    $ctr = $this->sysinfo->zread_ctr>0
-      ? $this->sysinfo->zread_ctr+1
-      : 1;
-    */
+    if (is_null($j)) {
+      $p = $this->aolGetPrev($date);
+      if (is_null($p)) {
+         $ctr = $this->sysinfo->zread_ctr>0
+        ? $this->sysinfo->zread_ctr+1
+        : 1;
+      } else
+        $ctr = $p['zcounter']+1;
+    } else
+      $ctr = $j['zcounter'];
+
     $pos_no = str_pad($this->sysinfo->pos_no, 4, '0', STR_PAD_LEFT);
     $zread = str_pad($ctr, 5, '0', STR_PAD_LEFT);//'0000'.$ctr;
     $f_tenantid = trim($this->sysinfo->tenantname);
