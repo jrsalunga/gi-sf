@@ -102,6 +102,177 @@ class Json extends Command
       
   }
 
+  private function ghl() {
+    $this->info('json');
+    $charges =  Charges::where('branch_id', '11e8f13b14dda9e4eaaf7233660a8f4c')
+                      ->where('terms', '<>', 'SIGNED')
+                      ->orderBy('orddate')
+                      ->orderBy('ordtime')
+                      ->get();
+
+   
+
+    $sales = [];
+    $sales[0] = [
+    'date'                => $charges[0]->orddate->copy()->subDay(),
+    'zcounter'            => 1,
+    'vat_gross'           => 0,
+    'vat_sale'            => 0,
+    'novat_gross'         => 0,
+    'novat_sale'          => 0,
+    'old_vat_gt_gross'    => 0,
+    'new_vat_gt_gross'    => 0,
+    'old_vat_gt_sale'     => 0,
+    'new_vat_gt_sale'     => 0,
+    'old_novat_gt_gross'  => 0,
+    'new_novat_gt_gross'  => 0,
+    'old_novat_gt_sale'   => 0,
+    'new_novat_gt_sale'   => 0,
+    'tot_disc'            => 0,
+    'sr_disc'            => 0,
+    ];
+    
+
+
+    $ctr=1;
+    $curr_date = NULL;
+    foreach ($charges as $key => $charge) {
+
+      if (is_null($curr_date)) {
+        $curr_date = $charge->orddate;
+        $sales[$ctr]['date'] = $curr_date;
+        $sales[$ctr]['zcounter'] = $ctr;
+
+        if ($charge->sr_disc>0) { 
+          $sales[$ctr]['vat_gross']   = 0;
+          $sales[$ctr]['vat_sale']    = 0;
+          $sales[$ctr]['novat_gross'] = $charge->chrg_grs;
+          $sales[$ctr]['novat_sale']  = $charge->tot_chrg;
+          $sales[$ctr]['sr_disc']     = $charge->disc_amt;
+          $sales[$ctr]['tot_disc']    = 0;
+        } else {
+          $sales[$ctr]['vat_gross']   = $charge->chrg_grs;
+          $sales[$ctr]['vat_sale']    = $charge->tot_chrg;
+          $sales[$ctr]['novat_gross'] = 0;
+          $sales[$ctr]['novat_sale']  = 0;
+          $sales[$ctr]['tot_disc']    = $charge->disc_amt;
+          $sales[$ctr]['sr_disc']     = 0;
+        }
+      }
+
+      
+
+      if ($curr_date==$charge->orddate) {
+        
+
+        if ($charge->sr_disc>0) { 
+          $sales[$ctr]['novat_gross'] += $charge->chrg_grs;
+          $sales[$ctr]['novat_sale']  += $charge->tot_chrg;
+          $sales[$ctr]['sr_disc']     += $charge->disc_amt;
+        } else {
+          $sales[$ctr]['vat_gross']   += $charge->chrg_grs;
+          $sales[$ctr]['vat_sale']    += $charge->tot_chrg;
+          $sales[$ctr]['tot_disc']    += $charge->disc_amt;
+        }
+
+      } else {
+
+
+        $ctr++;
+        $curr_date = $charge->orddate;
+        $sales[$ctr]['date'] = $curr_date;
+        $sales[$ctr]['zcounter'] = $ctr;
+
+        if ($charge->sr_disc>0) { 
+          $sales[$ctr]['vat_gross']   = 0;
+          $sales[$ctr]['vat_sale']    = 0;
+          $sales[$ctr]['novat_gross'] = $charge->chrg_grs;
+          $sales[$ctr]['novat_sale']  = $charge->tot_chrg;
+          $sales[$ctr]['sr_disc']     = $charge->disc_amt;
+          $sales[$ctr]['tot_disc']    = 0;
+        } else {
+          $sales[$ctr]['vat_gross']   = $charge->chrg_grs;
+          $sales[$ctr]['vat_sale']    = $charge->tot_chrg;
+          $sales[$ctr]['novat_gross'] = 0;
+          $sales[$ctr]['novat_sale']  = 0;
+          $sales[$ctr]['tot_disc']    = $charge->disc_amt;
+          $sales[$ctr]['sr_disc']     = 0;
+        }
+
+        
+      }
+      //$this->info($ctr);
+    }
+
+    
+    $prev_vat_gross = 0;
+    $prev_vat_sale = 0;
+    $prev_novat_gross = 0;
+    $prev_novat_sale = 0;
+    foreach ($sales as $key => $ds) {
+      //$this->info($key.' '.$ds['date']->format('Y-m-d').' '.$ds['sales'].' '.$ds['gross'].' '.$ds['taxsale'].' '.$ds['vat'].' '.$ds['notaxsale']);
+      $data = [];
+
+      if ($key>0) {
+
+        $prev = $key - 1;
+
+        $vat = (($ds['vat_gross']-$ds['tot_disc'])*.12)/1.12;
+        $vat_sales = $ds['vat_gross']-$ds['tot_disc']-$vat;
+
+        $novat_sales = $ds['novat_gross'] - $ds['sr_disc'];
+
+        $data = [
+          'date'              => $ds['date']->format('Y-m-d'),
+          'zcounter'          => $ds['zcounter'],
+          'sales'             => $vat_sales+$novat_sales,
+          'vat_gross'         => $ds['vat_gross'],
+          'old_vat_gt_gross'  => $prev_vat_gross,
+          'new_vat_gt_gross'  => $prev_vat_gross+$ds['vat_gross'],
+          'vat_sale'          => $vat_sales,
+          'old_vat_gt_sale'   => $prev_vat_sale,
+          'new_vat_gt_sale'   => $prev_vat_sale+$vat_sales,
+          'tot_disc'          => $ds['tot_disc'],
+          'sr_disc'           => $ds['sr_disc'],
+          'novat_gross'       => $ds['novat_gross'],
+          'old_novat_gt_gross'=> $prev_novat_gross,
+          'new_novat_gt_gross'=> $prev_novat_gross+$ds['novat_gross'],
+          'novat_sale'        => $novat_sales,
+          'old_novat_gt_sale'=> $prev_novat_sale,
+          'new_novat_gt_sale'=> $prev_novat_sale+$novat_sales,
+        ];
+
+         /*
+        'vat_gross'           => $c['vat_gross'],
+        'vat_sale'            => $vat_sales,
+        'novat_sale'          => $novat_sales,
+        'old_vat_gt_gross'    => $prev['prev_vat_gross'],
+        'new_vat_gt_gross'    => $prev['prev_vat_gross']+$c['vat_gross'],
+        'old_vat_gt_sale'     => $prev['prev_vat_sale'],
+        'new_vat_gt_sale'     => $prev['prev_vat_sale']+$vat_sales,
+        'new_novat_gt_gross'  => $prev['prev_novat_gross']+$c['novat_gross'],
+        'old_novat_gt_sale'   => $prev['prev_novat_sale'],
+        'new_novat_gt_sale'   => $prev['prev_novat_sale']+$novat_sales,
+
+        */
+
+        $prev_vat_gross += $ds['vat_gross'];
+        $prev_vat_sale += $vat_sales;
+        $prev_novat_gross += $ds['novat_gross'];
+        $prev_novat_sale += $novat_sales;
+       // $previoustax += $ds['vat'];
+        //$previoustaxsale += $ds['taxsale'];
+        //$previousnotaxsale += $ds['notaxsale'];
+
+        //$this->info($key.' '.$ds['date']->format('Y-m-d').' '.$ds['sales'].' '.$data['previousnrgt'].' '.$data['nrgt']);
+        //$this->info($key.' '.$ds['date']->format('Y-m-d').' '.$ds['sales'].' '.$ds['gross'].' '.$data['previousnrgt'].' '.$data['nrgt']);
+
+        $this->toJson($ds['date'], $data);
+      }
+    }
+    
+  }
+
   private function aol() {
     $this->info('json');
     $charges =  Charges::where('branch_id', '11e8918f1c1b0d85a7e09189291ab1b9')
@@ -177,9 +348,7 @@ class Json extends Command
           $sales[$ctr]['taxsale'] = ($charge->chrg_grs-$charge->disc_amt);
           $sales[$ctr]['vat'] = $charge->vat;
         }
-
       }
-
       //$this->info($ctr);
     }
 

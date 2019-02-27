@@ -23,10 +23,7 @@ class Eod extends Command
       $this->sysinfo();
       $this->extracted_path = 'C:\\GI_GLO';
       $this->lessors = ['pro', 'aol', 'yic', 'ocl'];
-      $this->path = 'C:\\EODFILES';
-      
-
-      
+      $this->path = 'C:\\EODFILES';      
   }
 
   public function handle() {
@@ -182,6 +179,11 @@ class Eod extends Command
         mdir($dir);
         return $this->out = $dir;
         break;
+      case 'OCL':
+        $dir = 'D:'.DS.'OCL'.DS.$this->date->format('Y').DS.$this->date->format('n').DS.$this->date->format('j');
+        mdir($dir);
+        return $this->out = $dir;
+        break;
       default:
         return $this->out = NULL;
         break;
@@ -189,7 +191,7 @@ class Eod extends Command
   }
 
   private function verifyCopyFile($file, $newfile) {
-    
+
     $this->info(' ');
 
     if (file_exists($file)) {
@@ -309,13 +311,18 @@ class Eod extends Command
   public function OCL(Carbon $date, $ext) {
     $c = $this->oclCharges($date);
     $this->oclDaily($date, $c, $ext);
-    //$this->oclHourly($date, $c, $ext);
+    $this->oclHourly($date, $c, $ext);
+    $this->oclInvoice($date, $c, $ext);
   }
+
+  private function zero($field) {
+    return $field == 0 ? 0 :  number_format($field, 2,'','');
+  } 
 
   private function oclDaily($date, $c, $ext) {
 
     $ext = $this->sysinfo->zread_ctr>0
-      ? $this->sysinfo->zread_ctr
+      ? $this->sysinfo->zread_ctr+1
       : 1;
 
     $filename = 'D'.substr($this->sysinfo->tenantname, 0, 5).'0'.($this->sysinfo->pos_no+0).$date->format('mdY');
@@ -328,18 +335,15 @@ class Eod extends Command
 
     $data = $this->oclDailyData($date, $c);
 
-    
-
     foreach ($data as $line => $value) {
       //$this->info($value);
       $sum = 0;
 
       $ln = str_pad($line+1, 2, '0', STR_PAD_LEFT);
      
-
-      $value = $ln.' '.$value;
-      $this->info('value: '.$value);
-      //$this->info($value);
+      //$value = $ln.' '.$value; // on local
+      $value = $ln.$value; // on productiom
+      //$this->info('value: '.$value);
 
       if (count($data)==($line+1))
         fwrite($fp, $value);
@@ -348,34 +352,28 @@ class Eod extends Command
 
     }
 
-
     fclose($fp);
 
-    if (file_exists($file)) {
-      $this->info($file.' - Daily OK');
-      alog($file.' - Daily OK');
-    } else {
-      $this->info($file.' - Error on generating');
-      alog($file.' - Error on generating');
-    }
-  }
+    $newfile = $this->out.DS.$filename.'.'.$ext;
 
-  private function zero($field) {
-    return $field == 0 ? 0 :  number_format($field, 2,'.','');
-  } 
+    $this->verifyCopyFile($file, $newfile);
+  }
 
   private function oclDailyData($date, $c) {
 
-    $zread = trim($this->sysinfo->zread_ctr);
+    $zread = trim($this->sysinfo->zread_ctr)+1;
 
     $vat = (($c['vat_gross']-$c['totdisc'])*.12)/1.12;
     $vat_sales = $c['vat_gross']-$c['totdisc']-$vat;
 
     $novat_sales = $c['novat_gross'] - $c['sr_disc'];
 
+    //$this->info($c['novat_gross'].' = '.$c['sr_disc']);
+
     $prev = $this->oclGetPrev($date);
 
     $this->toJson($date, [
+      'zcounter'            => $zread,
       'vat_gross'           => $c['vat_gross'],
       'vat_sale'            => $vat_sales,
       'novat_gross'         => $c['novat_gross'],
@@ -491,6 +489,151 @@ class Eod extends Command
     ];
   }
 
+  private function oclHourly($date, $c, $ext) {
+
+    $ext = $this->sysinfo->zread_ctr>0
+      ? $this->sysinfo->zread_ctr+1
+      : 1;
+
+    $filename = 'H'.substr($this->sysinfo->tenantname, 0, 5).'0'.($this->sysinfo->pos_no+0).$date->format('mdY');
+
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
+    mdir($dir);
+    $file = $dir.DS.$filename.'.'.$ext;
+    $fp = fopen($file, 'w');
+
+    foreach ([
+      trim(substr($this->sysinfo->tenantname, 0, 5)), //1 tenant code
+      '0'.($this->sysinfo->pos_no+0), // 2 terminal no
+      $date->format('mdY'), //3 trans date
+    ] as $line => $value) {
+      
+      $ln = str_pad($line+1, 2, '0', STR_PAD_LEFT);
+      //$value = $ln.' '.$value; // on local
+      $value = $ln.$value; // on productiom
+      //$this->info('value: '.$value);      
+       
+      fwrite($fp, $value.PHP_EOL);
+    }
+  
+    $hrly = $this->oclHourlyData($date, $c);
+
+    $tot_sales = 0;
+    $tot_trx = 0;
+    $len = 4;
+    foreach ($hrly as $key => $hr) {
+
+      foreach ($hr as $k => $value) {
+        //$n = ($len+$key+$k)+($len*$key);
+        $n = str_pad($len+$k, 2, '0', STR_PAD_LEFT);
+        //$this->info($n);
+        //$this->info($n.' '.$hr[$k]);
+
+        //$n = str_pad($line+1, 2, '0', STR_PAD_LEFT);
+        //$value = $n.' '.$value; // on local
+        $value = $n.$value; // on productiom
+        fwrite($fp, $value.PHP_EOL);
+        
+        if ($k==1)
+          $tot_sales += $hr[$k];
+        if ($k==2)
+          $tot_trx += $hr[$k];
+      }
+    }
+    //$this->info('tot sales: '.$tot_sales);
+    //$this->info('tot trx: '.$tot_trx);
+    
+    fwrite($fp, '08'.$this->zero($tot_sales).PHP_EOL);
+    fwrite($fp, '09'.$this->zero($tot_trx));
+
+    fclose($fp);
+
+    $newfile = $this->out.DS.$filename.'.'.$ext;
+
+    $this->verifyCopyFile($file, $newfile);
+  }
+
+  private function oclHourlyData($date, $c) {
+
+    $data = [];
+
+    for ($i=1; $i <= 24; $i++) { 
+
+      $k = str_pad($i, 2, '0', STR_PAD_LEFT);
+      //$this->info($k);
+      //$data[$i]['date'] = Carbon::parse($date->format('Y-m-d').' '.$k.'00:00');
+      if (array_key_exists($k, $c['hrly'])) {
+        $data[$i] = [
+          $k=='00'?'24':$k,
+          $this->zero($c['hrly'][$k]['sales']), //SALES
+          number_format($c['hrly'][$k]['ctr'], 0,'.',''), // NO. OF TRX
+          number_format($c['hrly'][$k]['cust'], 0,'.',''), //QUANTITY SOLD
+          //number_format($s['hrly'][$k]['sr'], 0,'.',''), //QUANTITY SOLD
+        ];
+      } else {
+         $data[$i] = [
+          $k,
+          $this->zero(0),
+          '0',
+          '0',
+        ];
+      }
+    }
+
+    return $data;
+  }
+
+  private function oclInvoice($date, $c, $ext) {
+    
+    $ext = $this->sysinfo->zread_ctr>0
+      ? $this->sysinfo->zread_ctr+1
+      : 1;
+
+    $filename = 'I'.substr($this->sysinfo->tenantname, 0, 5).'0'.($this->sysinfo->pos_no+0).$date->format('mdY');
+
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
+    mdir($dir);
+    $file = $dir.DS.$filename.'.'.$ext;
+    $fp = fopen($file, 'w');
+    
+    foreach ([
+      trim(substr($this->sysinfo->tenantname, 0, 5)), //1 tenant code
+      '01', // Sales type
+      $date->format('mdY'), //3 trans date
+      '0'.($this->sysinfo->pos_no+0), // 4 terminal no
+    ] as $line => $value) {
+      
+      $ln = str_pad($line+1, 2, '0', STR_PAD_LEFT);
+      //$value = $ln.' '.$value; // on local
+      $value = $ln.$value; // on productiom
+      //$this->info('value: '.$value);      
+       
+      fwrite($fp, $value.PHP_EOL);
+    }
+
+    if (count($c['inv'])>0){
+      
+      foreach ($c['inv'] as $key => $inv) {
+        foreach ($inv as $k => $value) {
+          $n = str_pad(5+$k, 2, '0', STR_PAD_LEFT);
+          //$this->info($n.' '.$inv[$k]);
+
+          //$n = str_pad($line+1, 2, '0', STR_PAD_LEFT);
+          //$value = $n.' '.$value; // on local
+          $value = $n.$value; // on productiom
+          fwrite($fp, $value.PHP_EOL);
+        }
+      }
+    } else
+      $this->info('ERROR - No invoice found!');
+
+    fclose($fp);
+
+    $newfile = $this->out.DS.$filename.'.'.$ext;
+
+    $this->verifyCopyFile($file, $newfile);
+  }
+
   private function oclGetPrev(Carbon $date) {
     $filename = $date->copy()->subDay()->format('Ymd');
     $dir = $this->getStoragePath().DS.$date->format('Y').DS.$date->format('m');
@@ -525,6 +668,8 @@ class Eod extends Command
       $update = 0;
       
       $ds = [];
+      $ds['hrly'] = [];
+      $ds['inv'] = [];
       $ds['vat_gross'] = 0;
       $ds['vat_sale'] = 0;
       $ds['novat_gross'] = 0;
@@ -634,8 +779,8 @@ class Eod extends Command
             $ds['vat_trx']++;
           }
 
-          if ($data['dis_sr']>0) {
-              $ds['sr_disc'] += $data['dis_sr'];
+          if ($data['sr_disc']>0) {
+              $ds['sr_disc'] += $data['sr_disc'];
               $ds['sr_cnt'] ++;
           }
 
@@ -649,6 +794,49 @@ class Eod extends Command
             $ds['sale_chrg'] += $data['tot_chrg'];
           else
             $ds['sale_cash'] += $data['tot_chrg'];
+
+
+
+          /********* hourly ******************/
+          $h = substr($data['ordtime'], 0, 2);
+          if (array_key_exists($h, $ds['hrly'])) {
+            $ds['hrly'][$h]['sales'] += $data['tot_chrg'];
+            $ds['hrly'][$h]['ctr']++;
+
+            if ($data['dis_sr']>0 && $data['sr_body']!=$data['sr_tcust']) {
+              // dont compute cust
+            } else {
+              $ds['hrly'][$h]['cust']  += ($data['sr_body'] + $data['sr_tcust']);
+            }
+
+            if ($data['dis_sr']>0)
+              $ds['hrly'][$h]['sr'] += $data['sr_body'];
+          } else {
+            $ds['hrly'][$h]['sales'] = $data['tot_chrg'];
+            $ds['hrly'][$h]['ctr'] = 1;
+            
+            if ($data['dis_sr']>0 && $data['sr_body']!=$data['sr_tcust']) {
+              $ds['hrly'][$h]['cust'] = 0;
+            } else {
+              $ds['hrly'][$h]['cust']  = ($data['sr_body'] + $data['sr_tcust']);
+            }
+
+            if ($data['dis_sr']>0)
+              $ds['hrly'][$h]['sr'] = $data['sr_body'];
+            else
+              $ds['hrly'][$h]['sr'] = 0;
+          }
+          /********* end: hourly ******************/
+
+
+          /********* invoices ******************/
+          array_push($ds['inv'],[
+            $data['cslipno'],
+            $this->zero($data['tot_chrg']),
+            '01'
+          ]);
+          /********* end: invoices ******************/
+
           
           $update++;
         }
@@ -1194,7 +1382,7 @@ class Eod extends Command
 
             if ($data['dis_sr']>0)
               $ds['hrly'][$h]['sr'] += $data['sr_body'];
-          } else{
+          } else {
             $ds['hrly'][$h]['sales'] = $data['tot_chrg'];
             $ds['hrly'][$h]['ctr'] = 1;
             /*
@@ -1308,7 +1496,7 @@ class Eod extends Command
     return $a;
   }
 
-  private function aolGetItem(Carbon $date, $cslipno, $disc_pct=0) {
+  private function aolGetItem(Carbon $date, $cslipno, $disc_pct=0, $table_no) {
     $dbf_file = $this->extracted_path.DS.'SALESMTD.DBF';
     if (file_exists($dbf_file)) {
       $db = dbase_open($dbf_file, 0);
@@ -1333,9 +1521,7 @@ class Eod extends Command
         if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) { // if salesmtd date == backup date
           $data = $this->associateSalesmtd($row);
 
-          if ($data['cslipno']==$cslipno) {
-
-            
+          if ($data['cslipno']==$cslipno && $data['tblno']==$table_no) {
 
             if (strtolower($data['productcode'])=='zrmeal' && strtolower($data['tblno'])=='zrmeal') {
               
@@ -1480,7 +1666,7 @@ class Eod extends Command
           ];
 
           $disc_pct = $data['totdisc']>0 ? (($data['chrg_grs']-$data['totdisc'])/$data['chrg_grs']) : 0 ;
-          $items = $this->aolGetItem($date, $data['cslipno'], $disc_pct);
+          $items = $this->aolGetItem($date, $data['cslipno'], $disc_pct, $data['tblno']);
 
           foreach ($items['prods'] as $key => $prod) {
             if (!array_key_exists($key, $inv)) 
@@ -1555,8 +1741,6 @@ class Eod extends Command
       'doc'       => 'SALES_EOD'
     ];
 
-    
-    
     $sales = $this->aolGenHeader($date, $c, $ctr);
 
     $this->toJson($date, $sales);
@@ -1566,10 +1750,8 @@ class Eod extends Command
     $sales['trx'] = $trans['trx'];
     $product['product'] = $trans['product'];
 
-    foreach ($sales['trx'] as $key => $trx) {
-      //$this->info($trx['receiptno']);
+    foreach ($sales['trx'] as $key => $trx)
       $this->aolReceiptXml($trx['receiptno']);
-    }
 
     $this->aolInv($date, $trans);
 
@@ -1772,7 +1954,7 @@ class Eod extends Command
           ];
 
           $disc_pct = $data['totdisc']>0 ? (($data['chrg_grs']-$data['totdisc'])/$data['chrg_grs']) : 0 ;
-          $items = $this->aolGetItem($date, $data['cslipno'], $disc_pct);
+          $items = $this->aolGetItem($date, $data['cslipno'], $disc_pct, $data['tblno']);
 
           foreach ($items['prods'] as $key => $prod) {
             if (!array_key_exists($key, $inv)) {
@@ -2031,7 +2213,8 @@ class Eod extends Command
             $ds['grschrg']  += $data['tot_chrg'];
           } else {
             $ds['grschrg']  += $data['tot_chrg'];
-            $ds['taxsale'] += $data['chrg_grs']-$ds['totdisc'];
+            #$ds['taxsale'] += $data['chrg_grs']-$ds['totdisc'];
+            $ds['taxsale'] += $data['tot_chrg'];
             $ds['taxincsale'] += $data['chrg_grs']-$ds['totdisc'];
 
             $ds['vat']      += $data['vat'];
