@@ -1521,7 +1521,8 @@ class Eod extends Command
         if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) { // if salesmtd date == backup date
           $data = $this->associateSalesmtd($row);
 
-          if ($data['cslipno']==$cslipno && $data['tblno']==$table_no) {
+          //if ($data['cslipno']==$cslipno) {
+          if ($data['cslipno']==$cslipno && ($data['tblno']==$table_no || strtolower($data['tblno'])=='zrmeal')) {
 
             if (strtolower($data['productcode'])=='zrmeal' && strtolower($data['tblno'])=='zrmeal') {
               
@@ -2610,7 +2611,8 @@ class Eod extends Command
       $row['gross'] = $row['tot_chrg'];
     } else {
       $row['trx_disc'] = '0.00';
-      $row['taxsale'] = $row['chrg_grs']-$row['totdisc'];
+      #$row['taxsale'] = $row['chrg_grs']-$row['totdisc'];
+      $row['taxsale'] = $row['tot_chrg'];
       $row['notaxsale'] = '0.00';
       $row['taxexsale'] = '0.00';
       $row['taxincsale'] = $row['chrg_grs']-$row['totdisc'];

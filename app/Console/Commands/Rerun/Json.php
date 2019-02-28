@@ -129,7 +129,8 @@ class Json extends Command
     'old_novat_gt_sale'   => 0,
     'new_novat_gt_sale'   => 0,
     'tot_disc'            => 0,
-    'sr_disc'            => 0,
+    'sr_disc'             => 0,
+    'sales'             => 0,
     ];
     
 
@@ -142,6 +143,7 @@ class Json extends Command
         $curr_date = $charge->orddate;
         $sales[$ctr]['date'] = $curr_date;
         $sales[$ctr]['zcounter'] = $ctr;
+        $sales[$ctr]['sales'] = $charge->tot_chrg;
 
         if ($charge->sr_disc>0) { 
           $sales[$ctr]['vat_gross']   = 0;
@@ -164,7 +166,7 @@ class Json extends Command
 
       if ($curr_date==$charge->orddate) {
         
-
+        $sales[$ctr]['sales'] += $charge->tot_chrg;
         if ($charge->sr_disc>0) { 
           $sales[$ctr]['novat_gross'] += $charge->chrg_grs;
           $sales[$ctr]['novat_sale']  += $charge->tot_chrg;
@@ -182,6 +184,7 @@ class Json extends Command
         $curr_date = $charge->orddate;
         $sales[$ctr]['date'] = $curr_date;
         $sales[$ctr]['zcounter'] = $ctr;
+        $sales[$ctr]['sales'] = $charge->tot_chrg;
 
         if ($charge->sr_disc>0) { 
           $sales[$ctr]['vat_gross']   = 0;
@@ -205,6 +208,7 @@ class Json extends Command
     }
 
     
+    $prev_sale = 0;
     $prev_vat_gross = 0;
     $prev_vat_sale = 0;
     $prev_novat_gross = 0;
@@ -217,7 +221,7 @@ class Json extends Command
 
         $prev = $key - 1;
 
-        $vat = (($ds['vat_gross']-$ds['tot_disc'])*.12)/1.12;
+        $vat = number_format((($ds['vat_gross']-$ds['tot_disc'])*.12)/1.12, 2, '.', '')+0;
         $vat_sales = $ds['vat_gross']-$ds['tot_disc']-$vat;
 
         $novat_sales = $ds['novat_gross'] - $ds['sr_disc'];
@@ -225,7 +229,10 @@ class Json extends Command
         $data = [
           'date'              => $ds['date']->format('Y-m-d'),
           'zcounter'          => $ds['zcounter'],
-          'sales'             => $vat_sales+$novat_sales,
+          'sales'             => $ds['sales'],
+          'old_gt_sales'      => $prev_sale+$ds['sales'],
+          'new_gt_sales'      => $prev_sale+$ds['sales'],
+          'netsales'          => number_format($vat_sales+$novat_sales, 2, '.', '')+0,
           'vat_gross'         => $ds['vat_gross'],
           'old_vat_gt_gross'  => $prev_vat_gross,
           'new_vat_gt_gross'  => $prev_vat_gross+$ds['vat_gross'],
@@ -238,8 +245,8 @@ class Json extends Command
           'old_novat_gt_gross'=> $prev_novat_gross,
           'new_novat_gt_gross'=> $prev_novat_gross+$ds['novat_gross'],
           'novat_sale'        => $novat_sales,
-          'old_novat_gt_sale'=> $prev_novat_sale,
-          'new_novat_gt_sale'=> $prev_novat_sale+$novat_sales,
+          'old_novat_gt_sale' => $prev_novat_sale,
+          'new_novat_gt_sale' => $prev_novat_sale+$novat_sales,
         ];
 
          /*
@@ -256,6 +263,7 @@ class Json extends Command
 
         */
 
+        $prev_sale += $ds['sales'];
         $prev_vat_gross += $ds['vat_gross'];
         $prev_vat_sale += $vat_sales;
         $prev_novat_gross += $ds['novat_gross'];
