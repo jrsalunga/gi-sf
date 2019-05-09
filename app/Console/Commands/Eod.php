@@ -9,7 +9,7 @@ use Spatie\ArrayToXml\ArrayToXml;
 
 class Eod extends Command
 {
-  protected $signature = 'eod {date : YYYY-MM-DD} {--lessorcode= : File Extension} {--ext=csv : File Extension}';
+  protected $signature = 'eod {date : YYYY-MM-DD} {--lessorcode= : File Extension} {--ext=csv : File Extension} {--mode=eod : Run Mode} {--dateTo=NULL : Date To}';
   protected $description = 'Command description';
   private $excel;
   private $sysinfo;
@@ -27,9 +27,6 @@ class Eod extends Command
   }
 
   public function handle() {
-
-    alog('Starting...');
-    //$this->info($this->sysinfo->trandate);
 
     $date = $this->argument('date');
     if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $date)) {
@@ -52,12 +49,36 @@ class Eod extends Command
 
     $date = Carbon::parse($date);
 
-    if ($date->gte(Carbon::now()))
-      $this->checkOrder();
+    if (strtolower($this->option('mode'))==='eod') {
+      alog('Starting...');
+      //$this->info($this->sysinfo->trandate);
 
-    $this->checkCashAudit($date);
+      if ($date->gte(Carbon::now()))
+        $this->checkOrder();
 
-    $this->generateEod($date, $lessorcode, $ext);
+      $this->checkCashAudit($date);
+
+      $this->generateEod($date, $lessorcode, $ext);
+
+    } else if (strtolower($this->option('mode'))==='resend') {
+      $this->info('running on resend mode');
+      $this->getOut();
+
+      $to = $this->option('dateTo');
+      if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $to)) {
+        $to = $date;        
+      } else {
+        $to = Carbon::parse($to);
+        if ($to->lt($date))
+          $to = $date;        
+      }
+      $this->resend($date, $to, $lessorcode);
+
+    } else {
+      $this->info('Error: unknown mode');
+    }
+
+    
   }
 
   private function getSysinfo($r) {
@@ -166,7 +187,7 @@ class Eod extends Command
     switch ($this->lessor) {
       case 'AOL':
         //$this->out = '\\\\192.168.1.50\\User0001L';
-        //$this->out = '\\\\192.168.1.5\\maindepot\\TEST_AOL';
+        //return $this->out = '\\\\192.168.1.5\\maindepot\\TEST_AOL';
 
         return $this->out = 'Z:';
         /* run as admin
@@ -304,6 +325,59 @@ class Eod extends Command
     $this->getOut();
     
     $this->{$lessor}($date, $ext);
+  }
+
+  private function resend(Carbon $date, $to, $lessor) {
+    $this->info($date);
+    $this->info($lessor);
+
+     $lessor = empty($lessor) 
+      ? strtolower($this->sysinfo->lessorcode)
+      : $lessor;
+    
+    if (empty($lessor)) {
+      alog('Error: LESSORINFO on SYSINFO.DBF is empty.');
+      throw new Exception("Error: LESSORINFO on SYSINFO.DBF is empty."); 
+    }
+    
+    if (!in_array($lessor, $this->lessors)){
+      alog('Error: No lessor found.');
+      throw new Exception("Error: No lessor found."); 
+    }
+
+    $this->lessor = strtoupper($lessor);
+
+
+    $this->info('lessor: '.$this->lessor);
+    $this->info('to: '.$to);
+    $this->info($this->getPath());
+    $this->info('diff: '.$to->diffInDays($date));
+    
+    $xDay = $date->copy();
+    for ($i=0; $i <= $to->diffInDays($date); $i++) { 
+      $this->info($i.' '.$xDay);
+      $this->date = $xDay;
+      
+      $p = $this->getPath().DS.$xDay->format('Y').DS.$xDay->format('m').DS.$xDay->format('d');
+
+      if (is_dir($p)) {
+        foreach (scandir($p) as $key => $value) {
+          if(!is_dir($value)) {
+            $this->info($value);
+
+            $file = $p.DS.$value;
+            $newfile = $this->getOut().DS.$value;
+
+            $this->verifyCopyFile($file, $newfile);
+          }
+        }
+      }
+
+      $this->info('Success resending '.$xDay->format('Y-m-d'));
+      sleep(3);
+      $xDay->addDay();
+    }
+    $this->info('Done!');
   }
 
 
