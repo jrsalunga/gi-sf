@@ -183,16 +183,20 @@ class Eod extends Command
   }
 
   private function getOut() {
-
+    //return $this->out = NULL;
     switch ($this->lessor) {
       case 'AOL':
         //$this->out = '\\\\192.168.1.50\\User0001L';
-        //return $this->out = '\\\\192.168.1.5\\maindepot\\TEST_AOL';
+
+        if (app()->environment()=='local')
+          return $this->out = '\\\\192.168.1.5\\maindepot\\TEST_AOL';
+        else
+          return $this->out = '\\\\192.168.1.50\\User0001L';
 
         return $this->out = 'Z:';
         /* run as admin
 
-        net use Z: \\192.168.50\User0001L /user:User0001L D808bREMREf1kMJ /p:yes /savecred
+        net use Z: \\192.168.1.50\User0001L /user:User0001L D808bREMREf1kMJ /p:yes /savecred
         */
         break;
       case 'YIC':
@@ -941,15 +945,14 @@ class Eod extends Command
 
   private function yicCancelled(Carbon $date, $s, $ext='csv') {
 
-
-    $filename = substr($this->sysinfo->tenantcode, 0, 3).($this->sysinfo->pos_no+0).$date->format('jny').'R';
+    $filename = substr($this->sysinfo->tenantcode, 0, 3).$date->format('jny').'R';
     //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
     mdir($dir);
     $file = $dir.DS.$filename.'.'.$ext;
     $fp = fopen($file, 'w');
 
-    $header = ['DteTrnsctn', 'MrchntCd', 'RfndCncldCd', 'RfndCncldRsn', 'Amt', 'CntDcmnt', 'CntCstmr', 'CntSnrCtzn'];
+    $header = ['fdtTrnsctn', 'fvcMrchntCd', 'fvcRfndCncldCd', 'fvcRfndCncldRsn', 'fnmAmt', 'fnmCntDcmnt', 'fnmCntCstmr', 'fnmCntSnrCtzn'];
     if (strtolower($ext)=='csv')
       fputcsv($fp, $header);
     else
@@ -986,14 +989,14 @@ class Eod extends Command
 
     if (count($s['disc'])>0) {
 
-      $filename = substr($this->sysinfo->tenantcode, 0, 3).($this->sysinfo->pos_no+0).$date->format('jny').'D';
+      $filename = substr($this->sysinfo->tenantcode, 0, 3).$date->format('jny').'D';
       //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
       $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
       mdir($dir);
       $file = $dir.DS.$filename.'.'.$ext;
       $fp = fopen($file, 'w');
 
-      $header = ['DteTrnsctn', 'MrchntCd', 'DscntCd', 'DscntPrcntg', 'Dscnt', 'CntDcmnt', 'CntCstmr', 'CntSnrCtzn'];
+      $header = ['fdtTrnsctn', 'fvcMrchntCd', 'fvcDscntCd', 'fvcDscntPrcntg', 'fnmDscnt', 'fnmCntDcmnt', 'fnmCntCstmr', 'fnmCntSnrCtzn'];
       if (strtolower($ext)=='csv')
         fputcsv($fp, $header);
       else
@@ -1033,14 +1036,14 @@ class Eod extends Command
 
     if (count($s['payment'])>0) {
 
-      $filename = substr($this->sysinfo->tenantcode, 0, 3).($this->sysinfo->pos_no+0).$date->format('jny').'P';
+      $filename = substr($this->sysinfo->tenantcode, 0, 3).$date->format('jny').'P';
       //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
       $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
       $file = $dir.DS.$filename.'.'.$ext;
       mdir($dir);
       $fp = fopen($file, 'w');
 
-      $header = ['DteTrnsctn', 'MrchntCd', 'PymntCd', 'PymntDsc', 'PymntCdCLSCd', 'PymntCdCLSDsc', 'Pymnt'];
+      $header = ['fdtTrnsctn', 'fvcMrchntCd', 'fvcPymntCd', 'fvcPymntDsc', 'fvcPymntCdCLSCd', 'fvcPymntCdCLSDsc', 'fnmPymnt'];
       if (strtolower($ext)=='csv')
         fputcsv($fp, $header);
       else
@@ -1077,7 +1080,7 @@ class Eod extends Command
 
     if (count($s['hrly'])>0) {
 
-      $filename = substr($this->sysinfo->tenantcode, 0, 3).($this->sysinfo->pos_no+0).$date->format('jny').'H';
+      $filename = substr($this->sysinfo->tenantcode, 0, 3).$date->format('jny').'H';
       //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
       $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
       mdir($dir);
@@ -1085,7 +1088,7 @@ class Eod extends Command
       $file = $dir.DS.$filename.'.'.$ext;
       $fp = fopen($file, 'w');
 
-      $header = ['DteTrnsctn', 'MrchntCd', 'HRLCd', 'DlySls', 'CntDcmnt', 'CntCstmr', 'CntSnrCtzn'];
+      $header = ['fdtTrnsctn', 'fvcMrchntCd', 'fvcHRLCd', 'fnmDlySls', 'fnmCntDcmnt', 'fnmCntCstmr', 'fnmCntSnrCtzn'];
       if (strtolower($ext)=='csv')
         fputcsv($fp, $header);
       else
@@ -1103,7 +1106,7 @@ class Eod extends Command
             $k.':00', //HOUR
             number_format($s['hrly'][$k]['sales'], 4,'.',''), //SALES
             number_format($s['hrly'][$k]['ctr'], 0,'.',''), //QUANTITY SOLD
-            number_format($s['hrly'][$k]['cust'], 0,'.',''), //QUANTITY SOLD
+            number_format($s['hrly'][$k]['cust']-$s['hrly'][$k]['sr'], 0,'.',''), //QUANTITY SOLD
             number_format($s['hrly'][$k]['sr'], 0,'.',''), //QUANTITY SOLD
           ];
         } else {
@@ -1137,13 +1140,13 @@ class Eod extends Command
 
   private function yicDaily($date, $c, $ext='csv') {
 
-    $filename = substr($this->sysinfo->tenantcode, 0, 3).($this->sysinfo->pos_no+0).$date->format('jny').'S';
+    $filename = substr($this->sysinfo->tenantcode, 0, 3).$date->format('jny').'S';
     //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
     mdir($dir);
    
 
-    $data[0] = ['DteTrnsctn', 'MrchntCd', 'MrchntDsc', 'GrndTtlOld', 'GrndTtlNew', 'GTDlySls', 'GTDscnt', 'GTDscntSNR', 'GTDscntPWD', 'GTDscntGPC', 'GTDscntVIP', 'GTDscntEMP', 'GTDscntREG', 'GTDscntOTH', 'GTRfnd', 'GTCncld', 'GTSlsVAT', 'GTVATSlsInclsv', 'GTVATSlsExclsv', 'OffclRcptBeg', 'OffclRcptEnd', 'GTCntDcmnt', 'GTCntCstmr', 'GTCntSnrCtzn', 'GTLclTax', 'GTSrvcChrg', 'GTSlsNonVat', 'GTRwGrss', 'GtLclTaxDly', 'WrksttnNmbr', 'GTPymntCSH', 'GTPymntCRD', 'GTPymntOTH'];
+    $data[0] = ['fdtTrnsctn', 'fvcMrchntCd', 'fvcMrcntDsc', 'fnmGrndTtlOld', 'fnmGrndTtlNew', 'fnmGTDlySls', 'fnmGTDscnt', 'fnmGTDscntSNR', 'fnmfnmGTDscntPWD', 'fnmGTDscntGPC', 'fnmGTDscntVIP', 'fnmGTDscntEMP', 'fnmGTDscntREG', 'fnmGTDscntOTH', 'fnmGTRfnd', 'fnmGTCncld', 'fnmGTSlsVAT', 'fnmGTVATSlsInclsv', 'fnmGTVATSlsExclsv', 'fnmOffclRcptBeg', 'fnmOffclRcptEnd', 'fnmGTCntDcmnt', 'fnmGTCntCstmr', 'fnmGTCntSnrCtzn', 'fnmGTLclTax', 'fnmGTSrvcChrg', 'fnmGTSlsNonVat', 'fnmGTRwGrss', 'fnmGtLclTaxDly', 'fcvWrksttnNmbr', 'fnmGTPymntCSH', 'fnmGTPymntCRD', 'fnmGTPymntOTH'];
     $data[1] = [
       $date->format('Y-m-d'), //DteTrnsctn
       substr($this->sysinfo->tenantcode, 0, 3), //MrchntCd
@@ -1167,7 +1170,7 @@ class Eod extends Command
       $c['eod']['begor'],  //BEGINV
       $c['eod']['endor'], //ENDINV
       $c['eod']['trancnt'], //TRANCNT
-      $c['eod']['cust'], //TOTQTY
+      $c['eod']['cust']-$c['eod']['srcnt'], //TOTQTY
       $c['eod']['srcnt'], //TOTQTY
       number_format(0 , 4,'.',''), //GTLclTax
       number_format(0 , 4,'.',''), //GTSrvcChrg
@@ -1200,7 +1203,9 @@ class Eod extends Command
       
       $header = dbase_get_header_info($db);
       $record_numbers = dbase_numrecords($db);
-      $update = 0;
+      $update = 1;
+
+      $tot_cust = $sr_cust = 0;
       
       $ds = [];
       $ds['hrly'] = [];
@@ -1288,7 +1293,7 @@ class Eod extends Command
           $data = $this->associateAttributes($row);
 
           if (is_null($ds['eod']['begor']))
-            $ds['eod']['begor'] = $data['cslipno'];
+          $ds['eod']['begor'] = $data['cslipno'];
           $ds['eod']['endor'] = $data['cslipno'];
 
           $ds['eod']['grschrg']  += $data['chrg_grs'];
@@ -1303,8 +1308,14 @@ class Eod extends Command
 
           } else {
             $ds['eod']['cust']  += ($data['sr_body'] + $data['sr_tcust']);
-            $ds['eod']['vat']      += $data['vat'];
+            //$ds['eod']['vat']      += $data['vat'];
           }
+
+          if ($data['dis_sr']>0 && $data['sr_body']>0) {
+
+          } else 
+            $ds['eod']['vat']      += $data['vat'];
+
 
           if ($data['sr_disc']>0) {
             $ds['eod']['srcnt'] += $data['sr_body'];
@@ -1436,6 +1447,7 @@ class Eod extends Command
             $ds['payment']['cash'] += $data['tot_chrg'];
           }
 
+          //$h = str_pad(substr($data['ordtime'], 0, 2), 2, '0');
           $h = substr($data['ordtime'], 0, 2);
           if (array_key_exists($h, $ds['hrly'])) {
             $ds['hrly'][$h]['sales'] += $data['tot_chrg'];
@@ -1478,10 +1490,29 @@ class Eod extends Command
               $ds['hrly'][$h]['sr'] = 0;
           }
 
-          
+
+
+          if ($data['sr_body']>0 && $data['sr_disc']==0){
+            //$this->info('Trx: '.$update.' '.$row['CSLIPNO'].' '.$data['sr_disc']);
+          } else {
+            $tot_cust += ($data['sr_tcust']-$data['sr_body']);
+            $sr_cust  += $data['sr_body'];
+            //$this->info('Trx: '.$update.' '.$row['CSLIPNO'].' '.$data['sr_disc'].' '.($data['sr_tcust']-$data['sr_body']).' '.$data['sr_body']);
+          }
+
+          // if ($data['sr_body']<0 && $data['sr_disc']!=0){
+          //   $tot_cust += ($data['sr_tcust']-$data['sr_body']);
+          //   $sr_cust  += $data['sr_body'];
+          // }
+
           $update++;
+          
         }
       }
+
+      //$this->info('Total Customer: '.$tot_cust);
+      //$this->info('Total Senior: '.$sr_cust);
+
       $ds['eod']['trancnt'] = $update;
       //$ds['eod']['vat_in'] = $ds['eod']['sale'] - $ds['eod']['vat_ex'];
       
@@ -1597,6 +1628,13 @@ class Eod extends Command
 
           //if ($data['cslipno']==$cslipno) {
           if ($data['cslipno']==$cslipno && ($data['tblno']==$table_no || strtolower($data['tblno'])=='zrmeal')) {
+
+            if (empty($data['productcode'])) { // update:20190728
+              if (empty($data['product']))
+                $data['productcode'] = 'MISC';
+              else
+                $data['productcode'] = $data['product'];
+            } // end:update:20190728
 
             if (strtolower($data['productcode'])=='zrmeal' && strtolower($data['tblno'])=='zrmeal') {
               
