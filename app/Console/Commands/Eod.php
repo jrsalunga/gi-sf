@@ -1173,6 +1173,7 @@ class Eod extends Command
       $c['eod']['cust']-$c['eod']['srcnt'], //TOTQTY
       $c['eod']['srcnt'], //TOTQTY
       number_format(0 , 4,'.',''), //GTLclTax
+      //number_format($c['eod']['sale'], 4,'.',''), //GTDlySls + GTLclTax
       number_format(0 , 4,'.',''), //GTSrvcChrg
       number_format(0 , 4,'.',''), //GTSlsNonVat
       number_format($c['eod']['grschrg'], 4,'.',''), //GTRwGrss
@@ -1203,7 +1204,7 @@ class Eod extends Command
       
       $header = dbase_get_header_info($db);
       $record_numbers = dbase_numrecords($db);
-      $update = 1;
+      $update = 0;
 
       $tot_cust = $sr_cust = 0;
       
