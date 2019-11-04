@@ -389,6 +389,18 @@ class RecomputeBir extends Command
 
     $lines = [];
 
+    if ($brcode=='AVA') {
+      array_push($lines, bpad("ALQUIROS FOOD CORP.", 40));
+      array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));
+      array_push($lines, bpad("GILIGAN'S AVENUE OF THE ART", 40));
+      array_push($lines, bpad("COR.STA.MONICA ST. ERMITA", 40));
+      array_push($lines, bpad("MANILA CITY", 40));
+      array_push($lines, bpad("#205-257-440-000 VAT", 40));
+      array_push($lines, bpad("S/N Z5J7496FSWK7", 40));
+      array_push($lines, bpad("MIN# 17010105520101695", 40));
+      array_push($lines, bpad("PTU# FP012017-033-0110932-00003", 40));
+    }
+
     if ($brcode=='SAM') {
       array_push($lines, bpad("FJN6 FOOD CORPORATION", 40));
       array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));

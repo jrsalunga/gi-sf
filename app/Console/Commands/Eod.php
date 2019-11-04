@@ -944,8 +944,7 @@ class Eod extends Command
   }
 
   private function yicCancelled(Carbon $date, $s, $ext='csv') {
-
-    $filename = substr($this->sysinfo->tenantcode, 0, 3).$date->format('jny').'R';
+    $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'R';
     //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
     mdir($dir);
@@ -989,7 +988,7 @@ class Eod extends Command
 
     if (count($s['disc'])>0) {
 
-      $filename = substr($this->sysinfo->tenantcode, 0, 3).$date->format('jny').'D';
+      $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'D';
       //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
       $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
       mdir($dir);
@@ -1036,7 +1035,7 @@ class Eod extends Command
 
     if (count($s['payment'])>0) {
 
-      $filename = substr($this->sysinfo->tenantcode, 0, 3).$date->format('jny').'P';
+      $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'P';
       //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
       $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
       $file = $dir.DS.$filename.'.'.$ext;
@@ -1080,7 +1079,7 @@ class Eod extends Command
 
     if (count($s['hrly'])>0) {
 
-      $filename = substr($this->sysinfo->tenantcode, 0, 3).$date->format('jny').'H';
+      $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'H';
       //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
       $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
       mdir($dir);
@@ -1140,13 +1139,13 @@ class Eod extends Command
 
   private function yicDaily($date, $c, $ext='csv') {
 
-    $filename = substr($this->sysinfo->tenantcode, 0, 3).$date->format('jny').'S';
+    $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'S';
     //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
     mdir($dir);
    
 
-    $data[0] = ['fdtTrnsctn', 'fvcMrchntCd', 'fvcMrcntDsc', 'fnmGrndTtlOld', 'fnmGrndTtlNew', 'fnmGTDlySls', 'fnmGTDscnt', 'fnmGTDscntSNR', 'fnmfnmGTDscntPWD', 'fnmGTDscntGPC', 'fnmGTDscntVIP', 'fnmGTDscntEMP', 'fnmGTDscntREG', 'fnmGTDscntOTH', 'fnmGTRfnd', 'fnmGTCncld', 'fnmGTSlsVAT', 'fnmGTVATSlsInclsv', 'fnmGTVATSlsExclsv', 'fnmOffclRcptBeg', 'fnmOffclRcptEnd', 'fnmGTCntDcmnt', 'fnmGTCntCstmr', 'fnmGTCntSnrCtzn', 'fnmGTLclTax', 'fnmGTSrvcChrg', 'fnmGTSlsNonVat', 'fnmGTRwGrss', 'fnmGtLclTaxDly', 'fcvWrksttnNmbr', 'fnmGTPymntCSH', 'fnmGTPymntCRD', 'fnmGTPymntOTH'];
+    $data[0] = ['fdtTrnsctn', 'fvcMrchntCd', 'fvcMrcntDsc', 'fnmGrndTtlOld', 'fnmGrndTtlNew', 'fnmGTDlySls', 'fnmGTDscnt', 'fnmGTDscntSNR', 'fnmGTDscntPWD', 'fnmGTDscntGPC', 'fnmGTDscntVIP', 'fnmGTDscntEMP', 'fnmGTDscntREG', 'fnmGTDscntOTH', 'fnmGTRfnd', 'fnmGTCncld', 'fnmGTSlsVAT', 'fnmGTVATSlsInclsv', 'fnmGTVATSlsExclsv', 'fnmOffclRcptBeg', 'fnmOffclRcptEnd', 'fnmGTCntDcmnt', 'fnmGTCntCstmr', 'fnmGTCntSnrCtzn', 'fnmGTLclTax', 'fnmGTSrvcChrg', 'fnmGTSlsNonVat', 'fnmGTRwGrss', 'fnmGtLclTaxDly', 'fvcWrksttnNmbr', 'fnmGTPymntCSH', 'fnmGTPymntCRD', 'fnmGTPymntOTH'];
     $data[1] = [
       $date->format('Y-m-d'), //DteTrnsctn
       substr($this->sysinfo->tenantcode, 0, 3), //MrchntCd
@@ -1522,6 +1521,44 @@ class Eod extends Command
     } else {
       throw new Exception("Cannot locate CHARGES.DBF"); 
     }
+  }
+
+  private function getDateParam($x) {
+    $arr = [
+      0 => 0,
+      1 => 1,
+      2 => 2,
+      3 => 3,
+      4 => 4,
+      5 => 5,
+      6 => 6,
+      7 => 7,
+      8 => 8,
+      9 => 9,
+      10 => 'A',
+      11 => 'B',
+      12 => 'C',
+      13 => 'D',
+      14 => 'E',
+      15 => 'F',
+      16 => 'G',
+      17 => 'H',
+      18 => 'I',
+      19 => 'J',
+      20 => 'K',
+      21 => 'L',
+      22 => 'M',
+      23 => 'N',
+      24 => 'O',
+      25 => 'P',
+      26 => 'Q',
+      27 => 'R',
+      28 => 'S',
+      29 => 'T',
+      30 => 'U',
+      31 => 'V',
+    ];
+    return $arr[$x];
   }
   /*********************************************************** end: YIC ****************************************/
 
