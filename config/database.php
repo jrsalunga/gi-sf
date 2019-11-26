@@ -56,6 +56,21 @@ return [
             'engine' => null,
         ],
 
+        'rmis' => [
+            'driver' => 'mysql',
+            'host' => env('RMIS_HOST', '127.0.0.1'),
+            'port' => env('RMIS_PORT', '3306'),
+            'database' => env('RMIS_DATABASE', 'forge'),
+            'username' => env('RMIS_USERNAME', 'forge'),
+            'password' => env('RMIS_PASSWORD', ''),
+            'unix_socket' => env('RMIS_SOCKET', ''),
+            //'charset' => 'default',
+            //'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+            'engine' => null,
+        ],
+
         'mysql-live' => [
             'driver'    => 'mysql',
             'host'      => '192.168.1.5',
