@@ -162,9 +162,9 @@ class Eod extends Command
       }
       dbase_close($db);
 
-      if (!$valid) {
-        throw new Exception("Validation Error: No encoded ".join(", ", $a).". Please perform an EoD on POS before executing this command."); 
-      }
+      // if (!$valid) {
+      //   throw new Exception("Validation Error: No encoded ".join(", ", $a).". Please perform an EoD on POS before executing this command."); 
+      // }
 
     } else {
       throw new Exception("Cannot locate CSH_AUDT.DBF"); 
@@ -1138,20 +1138,129 @@ class Eod extends Command
   }
 
   private function yicDaily($date, $c, $ext='csv') {
+    
+    $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'S';
+    //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    mdir($dir);
+
+    $zread_dbf = 'C:\\GI_GLO\\ZREAD\\ZREAD.DBF';
+    if (!file_exists($zread_dbf)) {
+      
+      $this->info('ERROR - File not exist: '.$zread_dbf);
+      $this->info('Unable to generate CSV Salesfile.');
+      alog('Error - File not exist: '.$zread_dbf);
+      alog('Unable to generate CSV Salesfile');
+
+      return false;
+    }
+
+    $this->info('OK - File: '.$zread_dbf);
+    alog('OK - File: '.$zread_dbf);
+
+    $data[0] = ['fdtTrnsctn', 'fvcMrchntCd', 'fvcMrcntDsc', 'fnmGrndTtlOld', 'fnmGrndTtlNew', 'fnmGTDlySls', 'fnmGTDscnt', 'fnmGTDscntSNR', 'fnmGTDscntPWD', 'fnmGTDscntGPC', 'fnmGTDscntVIP', 'fnmGTDscntEMP', 'fnmGTDscntREG', 'fnmGTDscntOTH', 'fnmGTRfnd', 'fnmGTCncld', 'fnmGTSlsVAT', 'fnmGTVATSlsInclsv', 'fnmGTVATSlsExclsv', 'fnmOffclRcptBeg', 'fnmOffclRcptEnd', 'fnmGTCntDcmnt', 'fnmGTCntCstmr', 'fnmGTCntSnrCtzn', 'fnmGTLclTax', 'fnmGTSrvcChrg', 'fnmGTSlsNonVat', 'fnmGTRwGrss', 'fnmGtLclTaxDly', 'fvcWrksttnNmbr', 'fnmGTPymntCSH', 'fnmGTPymntCRD', 'fnmGTPymntOTH'];
+    $data[1] = $this->yicGetZread($date, $zread_dbf);
+
+    $x = [];
+    foreach ($data[0] as $k => $val) {
+      $x[$val] = $data[1][$k];
+    }
+    //$x['zcounter'] = $prev['zcounter'] + 1;
+    //$this->toJson($date, $x);
+
+
+    if (strtolower($ext)=='csv')
+      $this->toCSV($data, $date, $filename, $ext, $dir);
+    else
+      $this->toTXT($data, $date, $filename, $ext);
+
+    $file = $dir.DS.$filename.'.'.$ext;
+
+    $newfile = $this->out.DS.$filename.'.'.$ext;
+
+    $this->verifyCopyFile($file, $newfile);
+    // exit;
+
+
+  }
+
+  private function yicGetZread($date, $zread_dbf) {
+    //$this->info('OK - File: '.$zread_dbf);
+
+    $dbf_file = $zread_dbf;
+    if (file_exists($dbf_file)) {
+      //$this->info('dbase_open');
+      $db = dbase_open($dbf_file, 0);
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);
+
+      $zread = [];
+
+
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+          
+        $row = dbase_get_record_with_names($db, $i);
+
+        //$this->info($row['F01']);
+
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['F01']));
+        } catch(Exception $e) {
+          continue;
+        }
+
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+         for ($j=1; $j <=33 ; $j++) { 
+          $v = $row['F'.str_pad($j,2,'0',STR_PAD_LEFT)];
+
+          if ($j==1) 
+            array_push($zread, $date->format('Y-m-d'));
+          else if($j==2 || $j==3 || $j==30)
+            array_push($zread, trim($v));
+          else if (in_array($j, [20,21,22,23,24]))
+            array_push($zread, $v);
+          else
+            array_push($zread, number_format($v, 4,'.',''));
+         }
+        }
+      }
+
+      dbase_close($db);
+      return $zread;
+    } else {
+      throw new Exception("Cannot locate ".$zread_dbf); 
+      return false;
+    }
+  }
+
+  private function yicDaily2($date, $c, $ext='csv') {
 
     $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'S';
     //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
     mdir($dir);
-   
+
+
+    $this->info('getJsonData');
+    $j = $this->getJsonData($date);
+
+    //$this->info(dd($j));
+
+
+    $prev = $this->yicGetPrev($date);
+
+    //$this->info(dd($prev));
+
 
     $data[0] = ['fdtTrnsctn', 'fvcMrchntCd', 'fvcMrcntDsc', 'fnmGrndTtlOld', 'fnmGrndTtlNew', 'fnmGTDlySls', 'fnmGTDscnt', 'fnmGTDscntSNR', 'fnmGTDscntPWD', 'fnmGTDscntGPC', 'fnmGTDscntVIP', 'fnmGTDscntEMP', 'fnmGTDscntREG', 'fnmGTDscntOTH', 'fnmGTRfnd', 'fnmGTCncld', 'fnmGTSlsVAT', 'fnmGTVATSlsInclsv', 'fnmGTVATSlsExclsv', 'fnmOffclRcptBeg', 'fnmOffclRcptEnd', 'fnmGTCntDcmnt', 'fnmGTCntCstmr', 'fnmGTCntSnrCtzn', 'fnmGTLclTax', 'fnmGTSrvcChrg', 'fnmGTSlsNonVat', 'fnmGTRwGrss', 'fnmGtLclTaxDly', 'fvcWrksttnNmbr', 'fnmGTPymntCSH', 'fnmGTPymntCRD', 'fnmGTPymntOTH'];
     $data[1] = [
       $date->format('Y-m-d'), //DteTrnsctn
       substr($this->sysinfo->tenantcode, 0, 3), //MrchntCd
       substr(trim($this->sysinfo->tenantname), 0, 50), //MrchntDsc
-      number_format($this->sysinfo->grs_total, 4,'.',''), //GrndTtlOld
-      number_format($this->sysinfo->grs_total + $c['eod']['sale'], 4,'.',''), //GrndTtlNew
+      number_format($prev['prev_gt'], 4,'.',''), //GrndTtlOld
+      //number_format($prev['prev_gt'] + ($c['eod']['sale']+$c['eod']['vat']), 4,'.',''), //GrndTtlNew
+      number_format($prev['prev_gt'] + ($c['eod']['sale']), 4,'.',''), //GrndTtlNew
       number_format($c['eod']['sale'], 4,'.',''), //GTDlySls
       number_format($c['eod']['totdisc'], 4,'.',''), //GTDscnt
       number_format($c['eod']['dis_sr'], 4,'.',''), //GTDscntSNR
@@ -1175,13 +1284,26 @@ class Eod extends Command
       //number_format($c['eod']['sale'], 4,'.',''), //GTDlySls + GTLclTax
       number_format(0 , 4,'.',''), //GTSrvcChrg
       number_format(0 , 4,'.',''), //GTSlsNonVat
+      //number_format(($c['eod']['sale']+$c['eod']['vat']+$c['eod']['totdisc']), 4,'.',''), //GTRwGrss
       number_format($c['eod']['grschrg'], 4,'.',''), //GTRwGrss
-      number_format(0 , 4,'.',''), //GtLclTaxDly
+      number_format($c['eod']['sale'] , 4,'.',''), //GtLclTaxDly  // daily sales + local tax
       ($this->sysinfo->pos_no+0), //TERMINUM
       number_format($c['eod']['sale_cash'], 4,'.',''),
       number_format($c['eod']['sale_chrg'], 4,'.',''),
       number_format(0 , 4,'.',''), //GTPymntOTH
     ];
+
+
+    $x = [];
+    foreach ($data[0] as $k => $val) {
+      $x[$val] = $data[1][$k];
+    }
+    $x['zcounter'] = $prev['zcounter'] + 1;
+    $this->toJson($date, $x);
+
+
+    //$this->info(dd($x));
+
 
     if (strtolower($ext)=='csv')
       $this->toCSV($data, $date, $filename, $ext, $dir);
@@ -1193,6 +1315,7 @@ class Eod extends Command
     $newfile = $this->out.DS.$filename.'.'.$ext;
 
     $this->verifyCopyFile($file, $newfile);
+    // exit;
   }
 
   private function yicCharges(Carbon $date) {
@@ -1559,6 +1682,44 @@ class Eod extends Command
       31 => 'V',
     ];
     return $arr[$x];
+  }
+
+  private function yicGetPrev(Carbon $date) {
+    $prev_date = $date->copy()->subDay();
+    $filename = $prev_date->format('Ymd');
+    $dir = $this->getStoragePath().DS.$prev_date->format('Y').DS.$prev_date->format('m');
+    $file = $dir.DS.$filename.'.json';
+    alog('Getting previous data');
+
+    if (file_exists($file)) {
+      $this->info('OK - File: '.$file);
+      alog('OK - File: '.$file);
+    } else {
+      $this->info('ERROR - File not exist: '.$file);
+      alog('Error - File not exist: '.$file);
+    }
+
+
+    $a['zcounter'] = 0;
+    $a['prev_gt'] = 0;
+    $a['prev_dailysales'] = 0;
+    $a['prev_vat'] = 0;
+    $a['prev_rawgross'] = 0;
+
+    if (file_exists($file)) {
+      alog('Reading - '.$file);
+      $json = json_decode(file_get_contents($file), true); 
+      
+      $a['prev_gt']         = $json['fnmGrndTtlNew'];
+      $a['prev_dailysales'] = $json['fnmGTDlySls'];
+      $a['prev_vat']        = $json['fnmGTSlsVAT'];
+      $a['prev_rawgross']   = $json['fnmGTRwGrss']; // dly sales + gt disc + vat
+      
+      $a['zcounter'] = $json['zcounter'];
+    } else {
+      alog($file.' not found!');
+    }
+    return $a;
   }
   /*********************************************************** end: YIC ****************************************/
 
