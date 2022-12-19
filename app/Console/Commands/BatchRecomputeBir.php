@@ -5,16 +5,21 @@ use Exception;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
-class RecomputeBir extends Command
+class BatchRecomputeBir extends Command
 {
   
-  protected $signature = 'bir {brcode : Branch Code} {date : YYYY-MM-DD} {--dateTo=NULL : Date To} {--percentage=0 : Percentage} {--print=false : Print} {--final=false : Final}';
+  // protected $signature = 'bir {brcode : Branch Code} {date : YYYY-MM-DD} {--dateTo=NULL : Date To} {--percentage=0 : Percentage} {--print=false : Print} {--final=false : Final}';
+  protected $signature = 'bir:all {--percentage=0 : Percentage} {--print=false : Print} {--final=false : Final}';
 
   protected $description = 'Command description';
 
   private $excel;
   private $sysinfo;
   private $extracted_path;
+  // private $branches = ['TAY', 'HFT', 'VAL', 'CMC', 'HSL', 'KZA', 'VSP', 'SRC', 'STW', 'TUT', 'PPP', 'MIL', 'SDH'];
+  // private $dates = ['2019-01-31', '2019-02-28', '2019-03-31', '2019-04-30', '2019-05-31', '2019-06-30', '2019-07-31', '2019-08-31', '2019-09-30', '2019-10-31', '2019-11-30', '2019-12-31'];
+  private $branches = ['GHL'];
+  private $dates = ['2020-01-31', '2020-02-28', '2020-03-31', '2020-04-30', '2020-05-31', '2020-06-30', '2020-07-31', '2020-08-31', '2020-09-30', '2020-10-31', '2020-11-30', '2020-12-31'];
 
   public function __construct() {
       parent::__construct();
@@ -22,47 +27,25 @@ class RecomputeBir extends Command
       $this->path = 'C:\\EOD_FILES';
   }
 
-  /*
-  Check muna ung CHARGES.DISC_AMT = 99.99
-
-  select b.code, a.orddate, count(a.id) as txn
-  from charges a
-  left join branch b
-  on a.branch_id = b.id
-  where a.orddate between '2019-01-01' and '2019-12-31' and a.disc_type = 'SR' and a.disc_amt = '99.99'
-  and b.code in ('TAY', 'HFT', 'VAL', 'CMC', 'HSL', 'KZA', 'VSP', 'SRC', 'STW', 'TUT', 'PPP', 'MIL', 'SDH', 'WVA', 'SAM', 'MOL', 'GTR', 'BAL')
-  group by 1, a.orddate
-  */
-
   public function handle() {
 
 
+  }
 
-    $br = \App\Models\Branch::where('code', strtoupper($this->argument('brcode')))->first();
+  public function generate($brcode, $date) {
+
+
+
+    $br = \App\Models\Branch::where('code', strtoupper($brcode))->first();
     if (!$br) {
       $this->info('Invalid Branch Code.');
       exit;
     }
 
 
-
-    $date = $this->argument('date');
-    if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $date)) {
-      $this->info('Invalid date.');
-      exit;
-    }
-
-    $date = Carbon::parse($date);
-
-    $to = $this->option('dateTo');
-    if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $to)) {
-      //$to = $date;        
-      $to = $date->copy()->lastOfMonth();        
-    } else {
-      $to = Carbon::parse($to);
-      if ($to->lt($date))
-        $to = $date;        
-    }
+    $fr = Carbon::parse($date)->startOfMonth();
+    $to = Carbon::parse($date)->lastOfMonth();
+    
     
 
     $percent = $this->option('percentage');
@@ -115,9 +98,7 @@ class RecomputeBir extends Command
       $this->toFile($br->code, $date, $to, $lines);
 
 
-      // $ds['sale_cash'] = number_format((($ds['sale']*($percent/100))-$ds['sale_chrg']), 2, '.', '');
-      $ds['sale_cash'] = number_format((($ds['sale_cash']*$percent)/100), 2, '.', '');
-      $ds['sale_chrg'] = number_format((($ds['sale_chrg']*$percent)/100), 2, '.', '');
+      $ds['sale_cash'] = number_format((($ds['sale']*($percent/100))-$ds['sale_chrg']), 2, '.', '');
 
 
       $ds['sale'] = $ds['sale_cash'] + $ds['sale_chrg'];
@@ -150,9 +131,9 @@ class RecomputeBir extends Command
         mkdir($dstfile, 0777, true);
      
       if ($this->option('final')=='true')
-        $nfile = $dstfile.'ZREAD-'.$to->format('Ymd').'.txt';
-      else
         $nfile = $dstfile.$date->format('Ymd').'-'.$to->format('Ymd').'-'.$percent.'.txt';
+      else
+        $nfile = $dstfile.'ZREAD-'.$to->format('Ymd').'.txt';
       copy($path, $nfile);
       
       $this->info($nfile);
@@ -274,7 +255,7 @@ class RecomputeBir extends Command
         
 
       } else if ($c->terms=='SIGNED') {
-        $this->info('SIGNED!'.' - '.$c->tot_chrg);
+       
       } else {
         $this->info('OTHER PAYMENT');
       }
@@ -634,17 +615,6 @@ class RecomputeBir extends Command
       array_push($lines, bpad("PTU# FP092016-54B-0098467-00018", 40));
     }
 
-    if ($brcode=='GHL') {
-      array_push($lines, bpad("GILIGAN'S ISLAND BAGUIO, INC.", 40));
-      array_push($lines, bpad("(GILIGAN'S GREENHILLS)", 40));
-      array_push($lines, bpad("PB-112 CONNECTICUT ARCADE GREENHILLS", 40));
-      array_push($lines, bpad("SHOPPING CENTER SAN JUAN CITY", 40));
-      array_push($lines, bpad("#006-070-024-015 VAT", 40));
-      array_push($lines, bpad("S/N Z4YAL617", 40));
-      array_push($lines, bpad("MIN# 19052919120338784", 40));
-      array_push($lines, bpad("PTU# FP052019-042-0216077-00015", 40));
-    }
-
     return $lines;
 
   }
@@ -652,8 +622,7 @@ class RecomputeBir extends Command
 
 
 
-     
-      
+
 
 
 }

@@ -5,10 +5,10 @@ use Exception;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
-class RecomputeBir extends Command
+class RecomputeBir_Old extends Command
 {
   
-  protected $signature = 'bir {brcode : Branch Code} {date : YYYY-MM-DD} {--dateTo=NULL : Date To} {--percentage=0 : Percentage} {--print=false : Print} {--final=false : Final}';
+  protected $signature = 'bir_old {brcode : Branch Code} {date : YYYY-MM-DD} {--dateTo=NULL : Date To} {--percentage=0 : Percentage} {--print=false : Print} {--final=false : Final}';
 
   protected $description = 'Command description';
 
@@ -115,9 +115,7 @@ class RecomputeBir extends Command
       $this->toFile($br->code, $date, $to, $lines);
 
 
-      // $ds['sale_cash'] = number_format((($ds['sale']*($percent/100))-$ds['sale_chrg']), 2, '.', '');
-      $ds['sale_cash'] = number_format((($ds['sale_cash']*$percent)/100), 2, '.', '');
-      $ds['sale_chrg'] = number_format((($ds['sale_chrg']*$percent)/100), 2, '.', '');
+      $ds['sale_cash'] = number_format((($ds['sale']*($percent/100))-$ds['sale_chrg']), 2, '.', '');
 
 
       $ds['sale'] = $ds['sale_cash'] + $ds['sale_chrg'];

@@ -9,6 +9,7 @@ use Spatie\ArrayToXml\ArrayToXml;
 
 class Eod extends Command
 {
+  // php artisan eod 2021-02-26 --lessorcode=yic
   protected $signature = 'eod {date : YYYY-MM-DD} {--lessorcode= : File Extension} {--ext=csv : File Extension} {--mode=eod : Run Mode} {--dateTo=NULL : Date To}';
   protected $description = 'Command description';
   private $excel;
@@ -22,7 +23,7 @@ class Eod extends Command
       $this->excel = $excel;
       $this->sysinfo();
       $this->extracted_path = 'C:\\GI_GLO';
-      $this->lessors = ['pro', 'aol', 'yic', 'ocl'];
+      $this->lessors = ['pro', 'aol', 'yic', 'ocl', 'pla', 'ver'];
       $this->path = 'C:\\EODFILES';      
   }
 
@@ -203,9 +204,18 @@ class Eod extends Command
         $dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$this->date->format('Y').DS.$this->date->format('n').DS.$this->date->format('j');
         mdir($dir);
         return $this->out = $dir;
+        /* run as admin
+
+        net use Z: \\192.168.35.190\gil_pos /user:gil.onemall 12345 /p:yes /savecred
+        */
         break;
       case 'OCL':
         $dir = 'D:'.DS.'OCL'.DS.$this->date->format('Y').DS.$this->date->format('n').DS.$this->date->format('j');
+        mdir($dir);
+        return $this->out = $dir;
+        break;
+      case 'VER':
+        $dir = 'D:'.DS.'VER'.DS.$this->date->format('Y').DS.$this->date->format('n');
         mdir($dir);
         return $this->out = $dir;
         break;
@@ -944,7 +954,7 @@ class Eod extends Command
   }
 
   private function yicCancelled(Carbon $date, $s, $ext='csv') {
-    $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'R';
+    $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getMonthParam($date->format('n')).$this->getDateParam($date->format('j')).$date->format('y').'R';
     //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
     mdir($dir);
@@ -988,7 +998,7 @@ class Eod extends Command
 
     if (count($s['disc'])>0) {
 
-      $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'D';
+      $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getMonthParam($date->format('n')).$this->getDateParam($date->format('j')).$date->format('y').'D';
       //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
       $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
       mdir($dir);
@@ -1035,7 +1045,7 @@ class Eod extends Command
 
     if (count($s['payment'])>0) {
 
-      $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'P';
+      $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getMonthParam($date->format('n')).$this->getDateParam($date->format('j')).$date->format('y').'P';
       //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
       $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
       $file = $dir.DS.$filename.'.'.$ext;
@@ -1079,7 +1089,7 @@ class Eod extends Command
 
     if (count($s['hrly'])>0) {
 
-      $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'H';
+      $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getMonthParam($date->format('n')).$this->getDateParam($date->format('j')).$date->format('y').'H';
       //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
       $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
       mdir($dir);
@@ -1139,7 +1149,7 @@ class Eod extends Command
 
   private function yicDaily($date, $c, $ext='csv') {
     
-    $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'S';
+    $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getMonthParam($date->format('n')).$this->getDateParam($date->format('j')).$date->format('y').'S';
     //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
     mdir($dir);
@@ -1180,8 +1190,6 @@ class Eod extends Command
 
     $this->verifyCopyFile($file, $newfile);
     // exit;
-
-
   }
 
   private function yicGetZread($date, $zread_dbf) {
@@ -1216,7 +1224,9 @@ class Eod extends Command
 
           if ($j==1) 
             array_push($zread, $date->format('Y-m-d'));
-          else if($j==2 || $j==3 || $j==30)
+          else if($j==2)
+            array_push($zread, substr($this->sysinfo->tenantcode, 0, 3));
+          else if($j==3 || $j==30)
             array_push($zread, trim($v));
           else if (in_array($j, [20,21,22,23,24]))
             array_push($zread, $v);
@@ -1236,7 +1246,7 @@ class Eod extends Command
 
   private function yicDaily2($date, $c, $ext='csv') {
 
-    $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).$date->format('jy').'S';
+    $filename = substr($this->sysinfo->tenantcode, 0, 3).$this->getDateParam($date->format('n')).'-'.$this->getMonthParam($date->format('j')).'-'.$date->format('y').'S';
     //$dir = 'D:\\'.substr($this->sysinfo->tenantcode, 0, 3).DS.$date->format('Y').DS.$date->format('n').DS.$date->format('j');
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
     mdir($dir);
@@ -1644,6 +1654,25 @@ class Eod extends Command
     } else {
       throw new Exception("Cannot locate CHARGES.DBF"); 
     }
+  }
+
+  private function getMonthParam($x) {
+    $arr = [
+      0 => 0,
+      1 => 1,
+      2 => 2,
+      3 => 3,
+      4 => 4,
+      5 => 5,
+      6 => 6,
+      7 => 7,
+      8 => 8,
+      9 => 9,
+      10 => 'A',
+      11 => 'B',
+      12 => 'C',
+    ];
+    return $arr[$x];
   }
 
   private function getDateParam($x) {
@@ -2822,6 +2851,441 @@ class Eod extends Command
   }
 
   /*********************************************************** End: PRO ****************************************/
+
+
+  /*********************************************************** PLA ****************************************/
+  public function PLA(Carbon $date, $ext) {
+    $c = $this->plaCharges($date);
+    //$this->info('this is AOL');
+    //$this->info(json_encode($c));
+    $this->plaDaily($date, $c);
+  }
+
+  private function plaDaily(Carbon $date, $c) {
+
+    $ext = str_pad($this->sysinfo->pos_no, 3, '0', STR_PAD_LEFT);
+    $filename = $date->format('mdY');
+
+    //$this->info(' ');
+
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    if(!is_dir($dir))
+        mkdir($dir, 0775, true);
+    $file = $dir.DS.$filename.'.'.$ext;
+    $fp = fopen($file, 'w');
+
+
+    $data = [
+      str_pad('PACIFICMALL', 12, ' ', STR_PAD_LEFT),
+      str_pad(trim($this->sysinfo->tenantname), 12, ' ', STR_PAD_LEFT),
+      str_pad($ext, 12, ' ', STR_PAD_LEFT),
+      str_pad($date->format('Y-m-d'), 12, ' ', STR_PAD_LEFT),
+      str_pad(number_format($c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['vat'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      '000000000.00',
+      '000000000.00',
+      '000000000000',
+      '000000000.00',
+      '000000000000',
+      '000000000.00',
+      '000000000000',
+      str_pad(number_format($c['totdisc'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['disccnt'], 0,'.',''), 12, '0', STR_PAD_LEFT),
+      '000000000.00',
+      str_pad(number_format($c['sale_chrg'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['sale_cash'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      '000000000.00',
+      str_pad(number_format($this->sysinfo->zread_ctr-1, 0,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($this->sysinfo->grs_total-$c['grschrg'], 2,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($this->sysinfo->zread_ctr, 0,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($this->sysinfo->grs_total, 2,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['trancnt'], 0,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['begor'], 0,'.',''), 12, '0', STR_PAD_LEFT),
+      str_pad(number_format($c['endor'], 0,'.',''), 12, '0', STR_PAD_LEFT),
+    ];
+
+    $final = [];
+
+    foreach ($data as $line => $value) {
+      //$this->info($value);
+      $sum = 0;
+
+      $ln = str_pad($line+1, 2, '0', STR_PAD_LEFT);
+      foreach (str_split($ln) as $key => $char)  {
+        $ascii = ord($char);
+        //$this->info($char.' = '.$ascii);
+        $sum += $ascii;
+      }
+
+      foreach (str_split($value) as $key => $char) {
+        $ascii = ord($char);
+        //$this->info($char.' = '.$ascii);
+        $sum += $ascii;
+      }
+     // $this->info('sum: '.$sum);
+      $mod = $sum % 10;
+      //$this->info('modulo: '.$mod);
+      $parity = $mod % 2;
+     //$this->info('parity: '.$parity);
+
+      $value = $ln.$mod.$parity.$value;
+      //$this->info('value: '.$value);
+      //$this->info($value);
+
+      $final[$line] = $value;
+
+      if (count($data)==($line+1))
+        fwrite($fp, $value);
+      else
+        fwrite($fp, $value.PHP_EOL);
+
+    }
+    fclose($fp);
+
+    //$this->info(' ');
+    if (file_exists($file)) {
+      $this->info($file.' - Daily OK');
+    } else {
+      $this->info($file.' - Error on generating');
+    }
+
+  // public function plaCharges(Carbon $date) {
+    return $final;
+  }
+
+  private function plaCharges(Carbon $date) {
+    $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
+    if (file_exists($dbf_file)) {
+      $db = dbase_open($dbf_file, 0);
+      
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);
+      $update = 0;
+      
+      $ds = [];
+      $ds['grschrg'] = 0;
+      $ds['vat'] = 0;
+      $ds['totdisc'] = 0;
+      $ds['disccnt'] = 0;
+      $ds['sale_cash'] = 0;
+      $ds['sale_chrg'] = 0;
+      // $ds['begdor'] = NULL;
+      $ds['begor'] = NULL;
+      $ds['endor'] = NULL;
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
+        } catch(Exception $e) {
+          continue;
+        }
+        
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+          $data = $this->associateAttributes($row);
+          if (is_null($ds['begor']))
+            $ds['begor'] = $data['cslipno'];
+          $ds['endor'] = $data['cslipno'];
+
+          $ds['grschrg']  += $data['tot_chrg'];
+          $ds['vat']      += $data['vat'];
+          // $ds['totdisc']  += ($data['promo_amt'] + $data['sr_disc'] + $data['oth_disc'] + $data['u_disc']);
+          // if ($ds['totdisc']>0)
+          $disc = ($data['promo_amt'] + $data['sr_disc'] + $data['oth_disc'] + $data['u_disc']);
+          $ds['totdisc']  += $disc;
+          if ($disc>0)
+            $ds['disccnt']++;
+
+          if (strtolower($data['terms'])=='charge')
+            $ds['sale_chrg'] += $data['tot_chrg'];
+          else
+            $ds['sale_cash'] += $data['tot_chrg'];
+
+
+          // $h = substr($data['ordtime'], 0, 2);
+          // if (array_key_exists($h, $ds['hrly']))
+          //   $ds['hrly'][$h] += $data['tot_chrg'];
+          // else
+          //   $ds['hrly'][$h] = $data['tot_chrg'];
+
+
+          $update++;
+        }
+      }
+      $ds['trancnt'] = $update;
+      
+      dbase_close($db);
+      return $ds;
+    } else {
+      throw new Exception("Cannot locate CHARGES.DBF"); 
+    }
+  }
+  /*********************************************************** End: PLA ****************************************/
+
+
+
+  /*********************************************************** VER ****************************************/
+  public function VER(Carbon $date, $ext) {
+    $c = $this->verCharges($date);
+    
+    $this->verDaily($date, $c, $ext='txt');
+    
+  }
+
+  private function verDaily(Carbon $date, $c, $ext) {
+
+
+
+    
+    $filename = $date->format('mdY');
+
+    $zread = trim($this->sysinfo->zread_ctr)+1;
+
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    mdir($dir);
+
+    // $vat = (($c['vat_gross']-$c['totdisc'])*.12)/1.12;
+    // $vat_sales = $c['vat_gross']-$c['totdisc']-$vat;
+
+    // $novat_sales = $c['novat_gross'] - $c['sr_disc'];
+
+    //$this->info($c['novat_gross'].' = '.$c['sr_disc']);
+
+    
+    
+
+    $data = [];
+
+    $data[0] = [
+      'VS1', // 1. mall code
+      '123456789012345', // 2. contract #
+      1, // 3. Open field; default:1
+      'OF2', // 4. Open field; default:OF2
+      1, // 5. outlet #
+      number_format($this->sysinfo->grs_total,2,'.',','), // 6. New Grand Total
+      number_format(($this->sysinfo->grs_total-$c['grschrg']),2,'.',','), // 7. Old Grand Total
+      'ST01', // 8. Sales Type; default:ST01
+      number_format($c['grschrg'],2,'.',','), // 9. Net Sales
+      number_format($c['dis_prom'],2,'.',','), // 10. Regular Discount
+      number_format($c['dis_emp'],2,'.',','), // 11. Employee Discount
+      number_format($c['dis_sr'],2,'.',','), // 12. Senior Citizen Discount
+      number_format($c['dis_vip'],2,'.',','), // 13. VIP Discount
+      number_format($c['dis_pwd'],2,'.',','), // 14. PWD Discount
+      number_format($c['dis_oth'],2,'.',','), // 15. Other Discount
+      number_format($c['dis_ath'],2,'.',''), // 16. Athlete Discount
+      number_format(0,2,'.',''), // 17. Open field; default:0
+      number_format(0,2,'.',''), // 18. Open field; default:0
+      number_format(0,2,'.',''), // 19. Open field; default:0
+      number_format(0,2,'.',''), // 20. Open field; default:0
+      number_format(0,2,'.',''), // 21. Zero Rated Sales
+      number_format($c['vat'],2,'.',''), // 22. VAT
+      number_format(0,2,'.',''), // 23. Other Tax; default:0
+      number_format(0,2,'.',''), // 24. Adjustments; default:0
+      number_format(0,2,'.',''), // 25. Positive Adjustments; default:0
+      number_format(0,2,'.',''), // 26. Negative Adjustments; default:0
+      number_format(0,2,'.',''), // 27. Non Tax Positive Adjustments; default:0
+      number_format(0,2,'.',''), // 28. Non Tax Negative Adjustments; default:0
+      number_format($c['chrg_grs'],2,'.',''), // 29. Gross Sales
+      number_format(0,2,'.',''), // 30. Void
+      number_format(0,2,'.',''), // 31. Refund
+      number_format($c['grschrg'],2,'.',','), // 32. Sales inclusive of Vat // Net Sales
+      number_format($c['vat_xmpt'],2,'.',','), // 33. Non Vat Sales 
+      number_format($c['sale_chrg'],2,'.',','), // 34. Charge payment
+      number_format($c['sale_cash'], 2,'.',','), // 35. Cash payment
+      number_format(0,2,'.',''), // 36. Gift Cheque
+      number_format(0,2,'.',''), // 37. Debit Card
+      number_format(0,2,'.',''), // 38. Other Tender
+      number_format($c['master'], 2,'.',','), // 39. Cash payment
+      number_format($c['visa'], 2,'.',','), // 40. Cash payment
+      number_format($c['amex'], 2,'.',','), // 41. Cash payment
+      number_format($c['diners'], 2,'.',','), // 42. Cash payment
+      number_format($c['jcb'], 2,'.',','), // 43. Cash payment
+      number_format($c['other'], 2,'.',','), // 44. Cash payment
+      number_format(0,2,'.',''), // 45. Service Charge
+      number_format(0,2,'.',''), // 46. Other Charge
+      $c['begor']+0, // 47. First Transaction
+      $c['endor']+0, // 48. Last Transaction
+      $c['trancnt'], // 49. # of Transactions
+      $c['begor']+0, // 50. Beg Inv #
+      $c['endor']+0, // 51. End Inv #
+      $c['sale_cash_ctr'], // 52. Cash Transactions
+      0, // 53. GC Transactions
+      0, // 54. Debit Card Transactions
+      0, // 55. Other Tender Transactions
+      $c['master_ctr'], // 56. Master Trx
+      $c['visa_ctr'], // 57. Visa Trx
+      $c['amex_ctr'], // 58. Amex Trx
+      $c['diners_ctr'], // 59. Diners Trx
+      $c['jcb_ctr'], // 60. JCB Trx
+      $c['other_ctr'], // 61. Other Trx
+      1, // 62. POS #
+      trim($this->sysinfo->serialno), // 63. Serial No
+      trim($this->sysinfo->zread_ctr)+1, // 64. Z-Count
+      now()->format('His'), // 65. Transaction Time
+      now()->format('mdY'), // 66. Transaction Date
+    ];
+
+
+
+    if (strtolower($ext)=='csv')
+      $this->toCSV($data, $date, $filename, $ext);
+    else
+      $this->toTXT($data, $date, $filename, $ext);
+
+    $file = $dir.DS.$filename.'.'.$ext;
+
+    $newfile = $this->out.DS.$filename.'.'.$ext;
+
+    $this->verifyCopyFile($file, $newfile);
+
+
+     
+  }
+
+
+  private function verCharges(Carbon $date) {
+    $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
+    if (file_exists($dbf_file)) {
+      $db = dbase_open($dbf_file, 0);
+      
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);
+      $update = 0;
+      
+      $ds = [];
+      $ds['grschrg'] = 0;
+      $ds['chrg_grs'] = 0;
+      $ds['vat'] = 0;
+      $ds['totdisc'] = 0;
+      $ds['disccnt'] = 0;
+      $ds['sale_cash'] = 0;
+      $ds['sale_cash_ctr'] = 0;
+      $ds['sale_chrg'] = 0;
+      $ds['sale_chrg_ctr'] = 0;
+      $ds['begor'] = NULL;
+      $ds['endor'] = NULL;
+      $ds['dis_prom'] = 0;
+      $ds['dis_emp'] = 0;
+      $ds['dis_sr'] = 0;
+      $ds['dis_vip'] = 0;
+      $ds['dis_pwd'] = 0;
+      $ds['dis_oth'] = 0;
+      $ds['dis_ath'] = 0;
+      $ds['vat_xmpt'] = 0;
+      $ds['master'] = 0;
+      $ds['master_ctr'] = 0;
+      $ds['visa'] = 0;
+      $ds['visa_ctr'] = 0;
+      $ds['amex'] = 0;
+      $ds['amex_ctr'] = 0;
+      $ds['jcb'] = 0;
+      $ds['jcb_ctr'] = 0;
+      $ds['diners'] = 0;
+      $ds['diners_ctr'] = 0;
+      $ds['other'] = 0;
+      $ds['other_ctr'] = 0;
+      
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
+        } catch(Exception $e) {
+          continue;
+        }
+        
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+          $data = $this->associateAttributes($row);
+          if (is_null($ds['begor']))
+            $ds['begor'] = $data['cslipno'];
+          $ds['endor'] = $data['cslipno'];
+
+          $ds['grschrg']  += $data['tot_chrg'];
+          $ds['chrg_grs']  += $data['chrg_grs'];
+          $ds['vat']      += $data['vat'];
+          $ds['vat_xmpt'] += $data['vat_xmpt'];
+          // $ds['totdisc']  += ($data['promo_amt'] + $data['sr_disc'] + $data['oth_disc'] + $data['u_disc']);
+          // if ($ds['totdisc']>0)
+          $disc = ($data['promo_amt'] + $data['sr_disc'] + $data['oth_disc'] + $data['u_disc']);
+          $ds['totdisc']  += $disc;
+          if ($disc>0)
+            $ds['disccnt']++;
+
+
+          
+          $this->info($data['terms'].'='.$data['tot_chrg']);
+
+          if (strtolower($data['terms'])=='charge') {
+            $ds['sale_chrg'] += $data['tot_chrg'];
+            $ds['sale_chrg_ctr']++;
+            $this->info($data['card_type']);
+            if (starts_with($data['card_type'],'MASTER')) {
+              $ds['master'] += $data['tot_chrg'];
+              $ds['master_ctr']++;
+            } else if (starts_with($data['card_type'],'VISA')) {
+              $ds['visa'] += $data['tot_chrg'];
+              $ds['visa_ctr']++;
+            } else if (starts_with($data['card_type'],'DINERS')) {
+              $ds['amex'] += $data['tot_chrg'];
+              $ds['amex_ctr']++;
+            } else if (starts_with($data['card_type'],'AMEX')) {
+               $ds['diners'] += $data['tot_chrg'];
+              $ds['diners_ctr']++;
+            } else if (starts_with($data['card_type'],'JCB')) {
+              $ds['jcb'] += $data['tot_chrg'];
+              $ds['jcb_ctr']++;
+            } else {
+              $ds['other'] += $data['tot_chrg'];
+              $ds['other_ctr']++;
+            }
+
+          } else {
+            $ds['sale_cash'] += $data['tot_chrg'];
+            $ds['sale_cash_ctr']++;
+          }
+
+           $this->info($ds['sale_cash'].'='.$ds['sale_chrg']);
+
+          
+
+          $ds['dis_prom'] += $data['dis_prom'];
+          $ds['dis_emp'] += $data['dis_emp'];
+          $ds['dis_vip'] += $data['dis_vip'];
+          $ds['dis_oth'] += ($data['dis_udisc']+$data['dis_gpc']);
+          // $ds['dis_oth'] += $data['oth_disc'];
+
+          //if SR_DISC > 0
+          if ($data['sr_disc']>0) {
+            if (starts_with($data['card_name'],'SC'))
+               $ds['dis_sr'] += $data['dis_sr'];
+            if (starts_with($data['card_name'],'PWD'))
+               $ds['dis_pwd'] += $data['dis_sr'];
+            if (starts_with($data['card_name'],'ATH'))
+               $ds['dis_ath'] += $data['dis_sr'];
+          }
+
+          $update++;
+        }
+      }
+      $ds['trancnt'] = $update;
+      
+      dbase_close($db);
+      return $ds;
+    } else {
+      throw new Exception("Cannot locate CHARGES.DBF"); 
+    }
+  }
+  /*********************************************************** end: VER ****************************************/
+
+
+
+
+
+
+
+
+
+
 
   public function associateAttributes($r) {
     $row = [];
