@@ -519,7 +519,7 @@ class Eod extends Command
       //$this->zero($c['vat_sale']), //6 dailysales
       $c['reg_cust'], // 32 total cover count
       $zread, // 33 control #
-      $c['vat_trx'], // 34 total # of sales transactions
+      ($c['vat_trx']+$c['novat_trx']), // 34 total # of sales transactions
       '03', // 35 sales type
       $this->zero($vat_sales), // 36 amount
 
