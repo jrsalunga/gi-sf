@@ -115,9 +115,7 @@ class RecomputeBir extends Command
       $this->toFile($br->code, $date, $to, $lines);
 
 
-      // $ds['sale_cash'] = number_format((($ds['sale']*($percent/100))-$ds['sale_chrg']), 2, '.', '');
-      $ds['sale_cash'] = number_format((($ds['sale_cash']*$percent)/100), 2, '.', '');
-      $ds['sale_chrg'] = number_format((($ds['sale_chrg']*$percent)/100), 2, '.', '');
+      $ds['sale_cash'] = number_format((($ds['sale']*($percent/100))-$ds['sale_chrg']), 2, '.', '');
 
 
       $ds['sale'] = $ds['sale_cash'] + $ds['sale_chrg'];
@@ -643,6 +641,29 @@ class RecomputeBir extends Command
       array_push($lines, bpad("S/N Z4YAL617", 40));
       array_push($lines, bpad("MIN# 19052919120338784", 40));
       array_push($lines, bpad("PTU# FP052019-042-0216077-00015", 40));
+    }
+
+
+    if ($brcode=='OMV') {
+      array_push($lines, bpad("ALQUIROS, NIKKO ALEXANDER GARCIA", 40));
+      array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));
+      array_push($lines, bpad("GILIGAN'S ONEMALL VALENZUELA", 40));
+      array_push($lines, bpad("UNIT L2-06A ONEMALL VALENZUELA", 40));
+      array_push($lines, bpad("BRGY.GEN.T.DELEON VALENZUELA CITY", 40));
+      array_push($lines, bpad("449-124-012-004 VAT", 40));
+      array_push($lines, bpad("S/N Z9A9T16H", 40));
+      array_push($lines, bpad("MIN# 17110610273848996", 40));
+    }
+
+    if ($brcode=='FOR') {
+      array_push($lines, bpad("ALQUIROS, NEIL ZACHARY GARCIA", 40));
+      array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));
+      array_push($lines, bpad("GILIGAN'S FORA TAGAYTAY", 40));
+      array_push($lines, bpad("UNIT 1010-1011 FORA, BRGY.SILANG", 40));
+      array_push($lines, bpad("CROSSING EAST TAGAYTAY CITY, CAVITE", 40));
+      array_push($lines, bpad("#488-179-314-006 VAT", 40));
+      array_push($lines, bpad("S/N Z9ACOW8G", 40));
+      array_push($lines, bpad("MIN# 130339991", 40));
     }
 
     return $lines;

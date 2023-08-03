@@ -194,7 +194,11 @@ class Eod extends Command
         else
           return $this->out = '\\\\192.168.1.50\\User0001L';
 
-        return $this->out = 'Z:';
+        $dir = 'D:\\SALESFILE'.DS.$this->date->format('Y').DS.$this->date->format('n').DS.$this->date->format('j');
+        mdir($dir);
+        return $this->out = $dir;
+
+        return $this->out = 'D:\SALESFILE'.DS.$this->date->format('Y').DS.$this->date->format('n').DS.$this->date->format('j');
         /* run as admin
 
         net use Z: \\192.168.1.50\User0001L /user:User0001L D808bREMREf1kMJ /p:yes /savecred
@@ -215,7 +219,8 @@ class Eod extends Command
         return $this->out = $dir;
         break;
       case 'VER':
-        $dir = 'D:'.DS.'VER'.DS.$this->date->format('Y').DS.$this->date->format('n');
+        $dir = 'C:'.DS.'LSG';
+        // $dir = 'D:'.DS.'VER'.DS.$this->date->format('Y').DS.$this->date->format('n');
         mdir($dir);
         return $this->out = $dir;
         break;
@@ -2076,8 +2081,8 @@ class Eod extends Command
     $file = $dir.DS.$filename.'.xml';
 
     $id = [
-      'tenantid'  => $f_tenantid,//19010883
-      'key'       => 'ROWZWNLI',//'D15403MN',
+      'tenantid'  => $f_tenantid,//19010883 //23012682
+      'key'       => 'ROWZWNLI',//'D15403MN', //L8A6JDT6
       'tmid'      => $pos_no,
       'doc'       => 'SALES_EOD'
     ];
@@ -3062,16 +3067,16 @@ class Eod extends Command
       1, // 3. Open field; default:1
       'OF2', // 4. Open field; default:OF2
       1, // 5. outlet #
-      number_format($this->sysinfo->grs_total,2,'.',','), // 6. New Grand Total
-      number_format(($this->sysinfo->grs_total-$c['grschrg']),2,'.',','), // 7. Old Grand Total
-      'ST01', // 8. Sales Type; default:ST01
-      number_format($c['grschrg'],2,'.',','), // 9. Net Sales
-      number_format($c['dis_prom'],2,'.',','), // 10. Regular Discount
-      number_format($c['dis_emp'],2,'.',','), // 11. Employee Discount
-      number_format($c['dis_sr'],2,'.',','), // 12. Senior Citizen Discount
-      number_format($c['dis_vip'],2,'.',','), // 13. VIP Discount
-      number_format($c['dis_pwd'],2,'.',','), // 14. PWD Discount
-      number_format($c['dis_oth'],2,'.',','), // 15. Other Discount
+      number_format($this->sysinfo->grs_total,2,'.',''), // 6. New Grand Total
+      number_format(($this->sysinfo->grs_total-$c['grschrg']),2,'.',''), // 7. Old Grand Total
+      'S01', // 8. Sales Type; default:ST01
+      number_format($c['grschrg'],2,'.',''), // 9. Net Sales
+      number_format($c['dis_prom'],2,'.',''), // 10. Regular Discount
+      number_format($c['dis_emp'],2,'.',''), // 11. Employee Discount
+      number_format($c['dis_sr'],2,'.',''), // 12. Senior Citizen Discount
+      number_format($c['dis_vip'],2,'.',''), // 13. VIP Discount
+      number_format($c['dis_pwd'],2,'.',''), // 14. PWD Discount
+      number_format($c['dis_oth'],2,'.',''), // 15. Other Discount
       number_format($c['dis_ath'],2,'.',''), // 16. Athlete Discount
       number_format(0,2,'.',''), // 17. Open field; default:0
       number_format(0,2,'.',''), // 18. Open field; default:0
@@ -3088,19 +3093,19 @@ class Eod extends Command
       number_format($c['chrg_grs'],2,'.',''), // 29. Gross Sales
       number_format(0,2,'.',''), // 30. Void
       number_format(0,2,'.',''), // 31. Refund
-      number_format($c['grschrg'],2,'.',','), // 32. Sales inclusive of Vat // Net Sales
-      number_format($c['vat_xmpt'],2,'.',','), // 33. Non Vat Sales 
-      number_format($c['sale_chrg'],2,'.',','), // 34. Charge payment
-      number_format($c['sale_cash'], 2,'.',','), // 35. Cash payment
+      number_format($c['grschrg'],2,'.',''), // 32. Sales inclusive of Vat // Net Sales
+      number_format($c['vat_xmpt'],2,'.',''), // 33. Non Vat Sales 
+      number_format($c['sale_chrg'],2,'.',''), // 34. Charge payment
+      number_format($c['sale_cash'], 2,'.',''), // 35. Cash payment
       number_format(0,2,'.',''), // 36. Gift Cheque
       number_format(0,2,'.',''), // 37. Debit Card
       number_format(0,2,'.',''), // 38. Other Tender
-      number_format($c['master'], 2,'.',','), // 39. Cash payment
-      number_format($c['visa'], 2,'.',','), // 40. Cash payment
-      number_format($c['amex'], 2,'.',','), // 41. Cash payment
-      number_format($c['diners'], 2,'.',','), // 42. Cash payment
-      number_format($c['jcb'], 2,'.',','), // 43. Cash payment
-      number_format($c['other'], 2,'.',','), // 44. Cash payment
+      number_format($c['master'], 2,'.',''), // 39. Cash payment
+      number_format($c['visa'], 2,'.',''), // 40. Cash payment
+      number_format($c['amex'], 2,'.',''), // 41. Cash payment
+      number_format($c['diners'], 2,'.',''), // 42. Cash payment
+      number_format($c['jcb'], 2,'.',''), // 43. Cash payment
+      number_format($c['other'], 2,'.',''), // 44. Cash payment
       number_format(0,2,'.',''), // 45. Service Charge
       number_format(0,2,'.',''), // 46. Other Charge
       $c['begor']+0, // 47. First Transaction
