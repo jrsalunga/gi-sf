@@ -225,6 +225,11 @@ class Eod extends Command
         mdir($dir);
         return $this->out = $dir;
         break;
+        case 'SIA':
+        $dir = 'C:'.DS.'SIA';
+        mdir($dir);
+        return $this->out = $dir;
+        break;
       default:
         return $this->out = NULL;
         break;
@@ -3297,7 +3302,7 @@ class Eod extends Command
 
     $this->siaSalesmtd($date, $d, $s, $ext);
 
-    // $this->siaCombine($date, $ext);
+    $this->siaCombine($date, $ext);
   }
 
 
@@ -3356,7 +3361,6 @@ class Eod extends Command
 
           $tcust = $data['sr_body'];
           $vat_xmpt = $data['vat_xmpt'];
-          $sr = $data['disc_amt'];
           
           // $this->info($data['grschrg'].' '.$data['disc_type'].'='.$data['disc_amt'].'  '.$data['card_name']);
           // $this->info($data['card_name']);
@@ -3370,10 +3374,12 @@ class Eod extends Command
               $pwd_cust = $data['sr_body'];
               $tot_disc_name = 'PWD';
               $r_disc[$ctr++]['PWD']=$data['disc_amt'];
+              $pwd = $data['disc_amt'];
             } else {
               $sr_cust = $data['sr_body'];
               $tot_disc_name = 'SC';
               $r_disc[$ctr++]['SC']=$data['disc_amt'];
+              $sr = $data['disc_amt'];
             }
           } else {
             $vat_xmpt_sales = $data['tot_chrg'];
@@ -3435,7 +3441,7 @@ class Eod extends Command
 
         // $this->info('oth_disc_name='.$oth_disc_name);
        
-       $this->info($data['disc_type']);
+       // $this->info($data['disc_type']);
 
 
         switch (trim($data['disc_type'])) {
@@ -3527,7 +3533,7 @@ class Eod extends Command
 
 
 
-        $arr[0] = [
+        $_arr[0] = [
           "Order Num",
           "Business Day",
           "Check Open",
@@ -3668,8 +3674,8 @@ class Eod extends Command
       // print_r(array_keys($disc));
       // print_r($r_disc);
 
-      $this->info($dir);
-      $this->info($filename);
+      // $this->info($dir);
+      // $this->info($filename);
       $this->toTXT($arr, $date, $filename, $ext, $dir);
 
 
@@ -3764,7 +3770,7 @@ class Eod extends Command
           }
 
 
-          $arr[0] = [
+          $_arr[0] = [
             "Order Num / Bill Num",
             "Item ID",
             "Item Name",
@@ -3800,8 +3806,8 @@ class Eod extends Command
             $data['grsamt'],
             $disc_name,
             $disc_pct,
-            $x, // $disc_pct,
-            // "", // Modifier (1) Name
+            // $x, // $disc_pct,
+            "", // Modifier (1) Name
             0,  // Modifier (1) Quantity
             "", // Modifier (2) Name
             0,  // Modifier (2) Quantity
@@ -3817,8 +3823,8 @@ class Eod extends Command
         } // end:if
       } // end:for
 
-      $this->info($dir);
-      $this->info($filename);
+      // $this->info($dir);
+      // $this->info($filename);
       $this->toTXT($arr, $date, $filename, $ext, $dir);
 
     } else
@@ -3855,9 +3861,18 @@ class Eod extends Command
     } while ($ctr<$cnt);
 
 
-    print_r($c);
-    $this->joinFiles($c, $this->getPath().DS.$d->format('Y').DS.$d->format('m_Y').'_transactions.csv');
-    $this->joinFiles($s, $this->getPath().DS.$d->format('Y').DS.$d->format('m_Y').'_transactiondetails.csv');
+    // print_r($c);
+
+    // $newfile = $this->getOut().DS.$value;
+
+    $dc = $this->getPath().DS.$date->format('Y').DS.$date->format('m_Y').'_transactions.csv';
+    $this->joinFiles($c, $dc);
+    $ds = $this->getPath().DS.$date->format('Y').DS.$date->format('m_Y').'_transactiondetails.csv';
+    $this->joinFiles($s, $ds);
+
+
+    $this->verifyCopyFile($dc, $this->getOut().DS.$date->format('m_Y').'_transactions.csv');
+    $this->verifyCopyFile($ds, $this->getOut().DS.$date->format('m_Y').'_transactiondetails.csv');
 
 
   }
