@@ -23,7 +23,7 @@ class Eod extends Command
       $this->excel = $excel;
       $this->sysinfo();
       $this->extracted_path = 'C:\\GI_GLO';
-      $this->lessors = ['pro', 'aol', 'yic', 'ocl', 'pla', 'ver'];
+      $this->lessors = ['pro', 'aol', 'yic', 'ocl', 'pla', 'ver', 'sia'];
       $this->path = 'C:\\EODFILES';      
   }
 
@@ -54,8 +54,9 @@ class Eod extends Command
       alog('Starting...');
       //$this->info($this->sysinfo->trandate);
 
-      if ($date->gte(Carbon::now()))
-        $this->checkOrder();
+      if ($lessorcode!='sia')
+        if ($date->gte(Carbon::now()))
+          $this->checkOrder();
 
       $this->checkCashAudit($date);
 
@@ -282,19 +283,24 @@ class Eod extends Command
     $fp = fopen($file, 'w');
 
     foreach ($data as $fields) {
-     fputcsv($fp, $fields);
+     fputcsv($fp, $fields, ",", "\t");
     }
 
     fclose($fp);
   }
 
-  private function toTXT($data, $date, $filename=NULL, $ext='TXT') {
+  private function toTXT($data, $date, $filename=NULL, $ext='TXT', $path=NULL) {
 
     $file = is_null($filename)
       ? Carbon::now()->format('YmdHis v')
       : $filename;
 
-    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+
+    $dir = is_null($path)
+      ? $this->getpath().DS.$date->format('Y').DS.$date->format('m')
+      : $path;
+
+    // $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
 
     if(!is_dir($dir))
         mkdir($dir, 0775, true);
@@ -305,7 +311,7 @@ class Eod extends Command
 
     foreach ($data as $fields) {
       //$this->info(join(',', $fields));
-      fwrite($fp, join(',', $fields).PHP_EOL);
+      fwrite($fp, '"'.join('","', $fields).'"'.PHP_EOL);
     }
 
     fclose($fp);
@@ -727,9 +733,9 @@ class Eod extends Command
     $this->verifyCopyFile($file, $newfile);
   }
 
-  private function oclGetPrev(Carbon $date) {
+  private function oclGetPrev(Carbon $date) { 
     $filename = $date->copy()->subDay()->format('Ymd');
-    $dir = $this->getStoragePath().DS.$date->format('Y').DS.$date->format('m');
+    $dir = $this->getStoragePath().DS.$date->copy()->subDay()->format('Y').DS.$date->copy()->subDay()->format('m');
     $file = $dir.DS.$filename.'.json';
     alog('Getting previous data - OK');
     $a = [];
@@ -1182,7 +1188,6 @@ class Eod extends Command
     }
     //$x['zcounter'] = $prev['zcounter'] + 1;
     //$this->toJson($date, $x);
-
 
     if (strtolower($ext)=='csv')
       $this->toCSV($data, $date, $filename, $ext, $dir);
@@ -3283,9 +3288,604 @@ class Eod extends Command
   /*********************************************************** end: VER ****************************************/
 
 
+  /*********************************************************** SIA ****************************************/
+  public function SIA(Carbon $date, $ext) {
+
+    $d = $this->siaCharges($date, $ext);
+
+    $s = $this->siaCountCslipno($date);
+
+    $this->siaSalesmtd($date, $d, $s, $ext);
+
+    // $this->siaCombine($date, $ext);
+  }
 
 
 
+  private function siaCharges(Carbon $date, $ext='csv') {
+
+    $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
+    if (file_exists($dbf_file)) {
+      // $this->info('CHARGES.DBF found!');
+      $db = dbase_open($dbf_file, 0);
+      
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);
+      $update = 0;
+
+
+
+      $filename = $date->format('Ymd').'-CHARGES';
+      $dir = $this->getStoragePath().DS.$date->format('Y').DS.$date->format('m');
+      
+     
+      $disc = [];
+      $ctr = 0;
+      $arr = [];
+      $r_disc = [];
+      
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
+        } catch(Exception $e) {
+          continue;
+        }
+        
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+          $data = $this->associateAttributes($row);
+
+
+
+        if (in_array($data['chrg_type'], ['PANDA','GRAB'])) 
+          $trxtype = $data['chrg_type'];
+        else if (in_array($data['saletype'], ['CALPUP','ONLCUS'])) 
+          $trxtype = 'PICKUP';
+        else
+          $trxtype = $data['saletype'];
+
+        $tcust = $pwd = $sr = $ath = $vip = $emp = $prom = $pay_amt = $vatable = 0;
+        $tot_disc = $pwd_cust = $sr_cust = $ath_cust = $vip = $emp = $prom = $vat = $vat_xmpt = $vat_xmpt_sales = $oth_disc_amt = $odeal_disc_amt = 0;
+        $oth_disc_name = $odeal_disc_name = $pay_type = "";
+        $master = $visa = $amex = $jcb = $diners = $ewallet = $oth_ccard = $oth_tender = $cash = 0; 
+        $tot_disc_name = '';
+
+
+        if ($data['sr_disc']>0) {
+
+          $tcust = $data['sr_body'];
+          $vat_xmpt = $data['vat_xmpt'];
+          $sr = $data['disc_amt'];
+          
+          // $this->info($data['grschrg'].' '.$data['disc_type'].'='.$data['disc_amt'].'  '.$data['card_name']);
+          // $this->info($data['card_name']);
+          
+          if ($data['sr_body']==1) { // if 1 lang senior
+            
+            $vat_xmpt_sales = $data['tot_chrg'];
+            // $pos = str_contains($data['card_name'], 'PWD');
+            // $this->info($pos);
+            if (str_contains($data['card_name'], 'PWD')) {
+              $pwd_cust = $data['sr_body'];
+              $tot_disc_name = 'PWD';
+              $r_disc[$ctr++]['PWD']=$data['disc_amt'];
+            } else {
+              $sr_cust = $data['sr_body'];
+              $tot_disc_name = 'SC';
+              $r_disc[$ctr++]['SC']=$data['disc_amt'];
+            }
+          } else {
+            $vat_xmpt_sales = $data['tot_chrg'];
+            $sr_cust = $data['sr_body'];
+            $tot_disc_name = 'SC';
+          }
+
+
+
+
+        
+        } else {
+          $tcust = $data['sr_tcust'] - $data['sr_body'];
+          $vat = $data['vat'];
+        }
+
+
+
+        // $this->info($data['grschrg'].' '.$data['disc_type'].'='.$data['disc_amt'].'  '.$data['card_name'].'  '.$data['chrg_type'].'  '.$data['card_type']);
+
+
+        //** Discounts
+        $tot_disc = $data['promo_amt'] + $data['sr_disc'] + $data['oth_disc'] + $data['u_disc'];
+        
+
+
+
+        $a = ['DIS_PWD', 'DIS_UDISC', 'DIS_PROM', 'DIS_G', 'DIS_H', 'DIS_I', 'DIS_J', 'DIS_K', 'DIS_L', 'DIS_VX'];
+        foreach ($a as $key => $value) {
+          if (isset($row[$value]) && $row[$value]>0) {
+            // $this->info($value.'='.$row[$value]);
+            // $oth_disc_name = (is_null($oth_disc_name)) ? explode('_', $value)[1] : $oth_disc_name.'|'.explode('_', $value)[1];
+
+            $r_disc[$ctr++][explode('_', $value)[1]]=$row[$value];
+
+
+            if (empty($oth_disc_name) && empty($oth_disc_amt)) {
+              $oth_disc_name = explode('_', $value)[1];
+              $oth_disc_amt = $row[$value];
+            } else {
+              $oth_disc_name = $oth_disc_name.'::'.explode('_', $value)[1];
+              $oth_disc_amt = $oth_disc_amt.'::'.$row[$value];
+            }
+
+
+            
+
+          } 
+        }
+        
+        if ($oth_disc_amt>0)
+          $tot_disc_name = empty($tot_disc_name) ? $oth_disc_name : $tot_disc_name.'::'.$oth_disc_name ;
+
+        // if (empty($oth_disc_name) && empty($oth_disc_amt)) {
+          
+        // } else {
+        //   $this->info('NOT EMPTY oth_disc_amt');
+        // }
+
+        // $this->info('oth_disc_name='.$oth_disc_name);
+       
+       $this->info($data['disc_type']);
+
+
+        switch (trim($data['disc_type'])) {
+          case 'EMP':
+              $emp = $data['disc_amt'];
+              $tot_disc_name = empty($tot_disc_name) ? 'EMP' : $tot_disc_name.'::EMP' ;
+              $r_disc[$ctr++]['EMP']=$data['disc_amt'];
+            break;
+          case 'VIP':
+              $vip = $data['disc_amt'];
+              $tot_disc_name = empty($tot_disc_name) ? 'VIP' : $tot_disc_name.'::VIP' ;
+              $r_disc[$ctr++]['VIP']=$data['disc_amt'];
+            break;
+          case 'GPC':
+              $ath = $data['disc_amt'];
+              $tot_disc_name = empty($tot_disc_name) ? 'ATH' : $tot_disc_name.'::ATH' ;
+              $r_disc[$ctr++]['GPC']=$data['disc_amt'];
+              $vat = ($data['chrg_grs']/1.12)*.12;
+            break;
+          case 'SR': 
+              // $sr = $data['disc_amt']; // do nothing //nasa taas na
+            break;
+          default:
+            // $oth_disc_name = $data['disc_type'];
+            // $oth_disc_amt = $data['disc_amt'];
+            break;
+        }
+
+
+        if ($tot_disc>0) {
+          $p = ($tot_disc/$data['tot_chrg'])*100;
+            // $this->info($value.'='.$row[$value].' '.$p);
+          $disc[$data['cslipno']] = [$data['cslipno'], $tot_disc_name, $data['tot_chrg'], $tot_disc, $p, $data['sr_tcust'], $data['sr_body'], $data['vat_xmpt']];
+        }
+        //** end: Discounts
+
+
+
+        $pay_amt = $data['tot_chrg'];
+        if ($data['chrg_type']=='CASH') {
+          $pay_type = $data['chrg_type'];
+          $cash = $data['tot_chrg'];
+        } else 
+
+        if (in_array($data['chrg_type'], ['CHARGE', 'MAYA', 'BDO', 'BANKARD'])) {
+
+          // $pay_type = $data['chrg_type'].' '.$data['card_type'];
+          $pay_type = $data['card_type'];
+          switch (trim($data['card_type'])) {
+            case 'MASTER':
+              $master = $data['tot_chrg'];
+              break;
+            case 'VISA':
+              $visa = $data['tot_chrg'];
+              break;
+            case 'AMEX':
+              $amex = $data['tot_chrg'];
+              break;
+            case 'DINERS':
+              $diners = $data['tot_chrg'];
+              break;
+            case 'JCB':
+              $jcb = $data['tot_chrg'];
+              break;
+            case 'GCASH':
+            case 'MAYA':
+            case 'PAYMAYA':
+            case 'ALI':
+            case 'SHOPEE':
+            case 'SHOPEEPAY':
+            case 'QRPH':
+            case 'GRABPAY':
+            case 'WECHATPAY':
+              $ewallet = $data['tot_chrg'];
+              break;
+            default:
+              $oth_ccard = $data['tot_chrg'];
+              break;
+          }
+        } else
+
+        if (in_array($data['chrg_type'], ['GRAB', 'PANDA'])) {
+          $pay_type = $data['chrg_type'];
+          $oth_tender = $data['tot_chrg'];
+        } else { // ZAP
+          $pay_type = 'OTHERS';
+          $oth_tender = $data['tot_chrg'];
+        }
+
+
+
+        $arr[0] = [
+          "Order Num",
+          "Business Day",
+          "Check Open",
+          "Check Close",
+          "Sales Type",
+          "Transaction Type",
+          "Void",
+          "Void Amount",
+          "Refund",
+          "Refund Amount",
+          "Guest Count",
+          "Senior",
+          "PWD",
+          "Gross Sales Amount",
+          "Net Sales Amount",
+          "Total Tax",
+          "Other Local Tax",
+          "Total Service Charge",
+          "Total Tip",
+          "Total Discount",
+          "Less Tax Amount",
+          "Tax Exepmt Sales",
+          "Regular/Other Disc Name",
+          "Regular/Other Disc Amt",
+          "Emp Disc Amt",
+          "SR Disc Amt",
+          "VIP Disc Amt",
+          "PWD Disc Amt",
+          "ATH Disc Amt",
+          "SMAC Disc Amt",
+          "Online Deal Disc Name",
+          "Online Deal Disc Amt",
+          "Disc Field 1 Name",
+          "Disc Field 2 Name",
+          "Disc Field 3 Name",
+          "Disc Field 4 Name",
+          "Disc Field 5 Name",
+          "Disc Field 1 Amount",
+          "Disc Field 2 Amount",
+          "Disc Field 3 Amount",
+          "Disc Field 4 Amount",
+          "Disc Field 5 Amount",
+          "Payment Type 1",
+          "Payment Amt 1",
+          "Payment Type 2",
+          "Payment Amt 2",
+          "Payment Type 3",
+          "Payment Amt 3",
+          "Total Cash Sales Amt",
+          "Total GC Sales Amt",
+          "Total Debit Sales Amt",
+          "Total eWallet Sales Amt",
+          "Total Other Tender Sales Amt",
+          "Total Master Sales Amt",
+          "Total Visa Sales Amt",
+          "Total Amex Sales Amt",
+          "Total Diners Sales Amt",
+          "Total JCB Sales Amt",
+          "Total Other Card Sales Amt",
+          "Terminal #",
+          "Serial #",
+        ];
+        
+
+        $arr[$i] = [
+          $data['cslipno'],
+          $vfpdate->format('Y-m-d'),
+          $vfpdate->format('Y-m-d')." ".$data['ordtime'],
+          $vfpdate->format('Y-m-d')." ".$data['ordtime'],
+          'SM01',
+          $trxtype,
+          0, // Void
+          0, // Void Amount
+          0, // Refund
+          0, // Refund Amount
+          $tcust,
+          $sr_cust,
+          $pwd_cust,
+          $data['chrg_grs'],
+          $data['tot_chrg'],
+          $vat,
+          0, // Other Local Tax
+          0, // Total Service Charge
+          0, // Total Tip
+          $tot_disc,
+          $vat_xmpt,
+          $vat_xmpt_sales,
+          $oth_disc_name,
+          $oth_disc_amt,
+          $emp,
+          $sr,
+          $vip,
+          $pwd,
+          $ath,
+          0, // SMAC
+          "", // Online Deal Disc Name $odeal_disc_name
+          0, // Online Deal Disc Amt  = $odeal_disc_amt
+          "", // Disc Field 1 Name
+          "", // Disc Field 2 Name
+          "", // Disc Field 3 Name
+          "", // Disc Field 4 Name
+          "", // Disc Field 5 Name
+          0, // Disc Field 1 Amount
+          0, // Disc Field 2 Amount
+          0, // Disc Field 3 Amount
+          0, // Disc Field 4 Amount
+          0, // Disc Field 5 Amount
+          $pay_type,
+          $pay_amt,
+          "", // Payment Type 2
+          0, // "Payment Amt 2
+          "", // Payment Type 3
+          0, // "Payment Amt 3
+          $cash,
+          0, // GC
+          0, // Debit
+          $ewallet,
+          $oth_tender,
+          $master,
+          $visa,
+          $amex,
+          $diners,
+          $jcb,
+          $oth_ccard,
+          1,
+          "HYSZ190000479"
+        ];
+         
+
+
+
+
+        } // end:if
+      } // end:for
+
+      // print_r(array_keys($disc));
+      // print_r($disc);
+      // print_r(array_keys($disc));
+      // print_r($r_disc);
+
+      $this->info($dir);
+      $this->info($filename);
+      $this->toTXT($arr, $date, $filename, $ext, $dir);
+
+
+      return $disc;
+    } else
+      $this->info('CHARGES.DBF not found!');
+
+    return false;
+  }
+
+
+  private function siaCountCslipno(Carbon $date) {
+
+    $dbf_file = $this->extracted_path.DS.'SALESMTD.DBF';
+    if (file_exists($dbf_file)) {
+      $db = dbase_open($dbf_file, 0);
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);     
+      $arr = [];
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
+        } catch(Exception $e) {
+          continue;
+        }
+
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+          // $data = $this->associateSalesmtd($row);
+          array_push($arr, trim($row['CSLIPNO']));
+        } // end:if
+      } // end:for
+      return array_count_values($arr);
+    } else
+      $this->info('SALESMTD.DBF not found!');
+    return [];
+}
+
+
+  private function siaSalesmtd(Carbon $date, array $disc, array $s, $ext='csv') {
+
+    $dbf_file = $this->extracted_path.DS.'SALESMTD.DBF';
+    if (file_exists($dbf_file)) {
+      $db = dbase_open($dbf_file, 0);
+      
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);
+      $update = 0;
+
+      $filename = $date->format('Ymd').'-SALESMTD';
+      $dir = $this->getStoragePath().DS.$date->format('Y').DS.$date->format('m');
+     
+      $arr = [];
+      
+      $disc_pct = 0;
+      $disc_amt = 0;
+      $x = 0;
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
+        } catch(Exception $e) {
+          continue;
+        }
+        
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+          $data = $this->associateSalesmtd($row);
+
+          $disc_name = "";
+          $disc_pct = 0;
+          $x = 0;
+          if (in_array($data['cslipno'], array_keys($disc))) {
+
+              $disc_name = $disc[$data['cslipno']][1];
+
+              $disc_pct = ($disc[$data['cslipno']][4]/100)*$disc[$data['cslipno']][2];
+
+              if ($s[$data['cslipno']]>1) {
+                $disc_pct = $disc_pct/$s[$data['cslipno']];
+                $x = $disc_pct+($disc[$data['cslipno']][7]/$s[$data['cslipno']]);
+              } else {
+                $x = $disc_pct+$disc[$data['cslipno']][7];
+              }
+              
+              // $this->info($disc[$data['cslipno']][1].' '.$disc[$data['cslipno']][4].' '.$disc_pct.' '.$data['qty'].' '.$x);
+              
+
+              // $this->info($s[$data['cslipno']]);
+
+          }
+
+
+          $arr[0] = [
+            "Order Num / Bill Num",
+            "Item ID",
+            "Item Name",
+            "Item Parent Category",
+            "Item Category",
+            "Item Sub-Category",
+            "Item Quantity",
+            "Transaction Item Price",
+            "Menu Item Price",
+            "Discount Code",
+            "Discount Amount",
+            "Modifier (1) Name",
+            "Modifier (1) Quantity",
+            "Modifier (2) Name",
+            "Modifier (2) Quantity",
+            "Void",
+            "Void Amount",
+            "Refund",
+            "Refund Amount",
+          ];
+
+
+
+          $arr[$i] = [
+            $data['cslipno'],
+            $data['productcode'],
+            $data['product'],
+            $data['prodcat'],
+            $data['menucat'],
+            "", // Item SubCategory
+            $data['qty'],
+            number_format($data['netamt']-$x,2),
+            $data['grsamt'],
+            $disc_name,
+            $disc_pct,
+            $x, // $disc_pct,
+            // "", // Modifier (1) Name
+            0,  // Modifier (1) Quantity
+            "", // Modifier (2) Name
+            0,  // Modifier (2) Quantity
+            0, // Void
+            0, // Void Amount
+            0, // Refund
+            0, // Refund Amount
+          ];
+
+
+
+
+        } // end:if
+      } // end:for
+
+      $this->info($dir);
+      $this->info($filename);
+      $this->toTXT($arr, $date, $filename, $ext, $dir);
+
+    } else
+      $this->info('SALESMTD.DBF not found!');
+    return false;
+  }
+
+
+  private function siaCombine(Carbon $date, $ext='csv') {
+    $cnt = 5;
+    $ctr = 0;
+    $c = [];
+    $s = [];
+    array_push($c, $this->getStoragePath().DS.'HEADER-CHARGES.csv');
+    array_push($s, $this->getStoragePath().DS.'HEADER-SALESMTD.csv');
+    
+    do {
+
+      $d = $date->copy()->subday($ctr);
+
+      $pc = $this->getStoragePath().DS.$d->format('Y').DS.$d->format('m').DS.$d->format('Ymd').'-CHARGES.csv';
+      if (file_exists($pc))
+        array_push($c, $pc);
+      // else
+      //   $this->info('WARNING: '.$pr.' doesn\'t exist!');
+
+      $ps = $this->getStoragePath().DS.$d->format('Y').DS.$d->format('m').DS.$d->format('Ymd').'-SALESMTD.csv';
+      if (file_exists($ps))
+        array_push($s, $ps);
+      // else
+      //   $this->info('WARNING: '.$ps.' doesn\'t exist!');
+
+      $ctr++;
+    } while ($ctr<$cnt);
+
+
+    print_r($c);
+    $this->joinFiles($c, $this->getPath().DS.$d->format('Y').DS.$d->format('m_Y').'_transactions.csv');
+    $this->joinFiles($s, $this->getPath().DS.$d->format('Y').DS.$d->format('m_Y').'_transactiondetails.csv');
+
+
+  }
+
+  private function joinFiles(array $files, $result) {
+    if(!is_array($files)) {
+        throw new Exception('`$files` must be an array');
+    }
+
+    $wH = fopen($result, "w+");
+
+    foreach($files as $file) {
+        $fh = fopen($file, "r");
+        while(!feof($fh)) {
+            fwrite($wH, fgets($fh));
+        }
+        fclose($fh);
+        unset($fh);
+        // fwrite($wH, "\n"); //usually last line doesn't have a newline
+    }
+    fclose($wH);
+    unset($wH);
+
+    // joinFiles(array('join1.csv', 'join2.csv'), 'join3.csv');
+}
+
+
+  /*********************************************************** end: SIA ****************************************/
 
 
 
@@ -3358,6 +3958,7 @@ class Eod extends Command
     $row['dis_prom']      = trim($r['DIS_PROM']);
     $row['grschrg']       = trim($r['GRSCHRG']);
     $row['totchrg']       = trim($r['TOTCHRG']);
+    $row['saletype']      = trim($r['CUSFAX']);
 
     $row['subtotal'] = 0;
     $row['gross'] = 0;

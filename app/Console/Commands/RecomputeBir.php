@@ -666,6 +666,17 @@ class RecomputeBir extends Command
       array_push($lines, bpad("MIN# 130339991", 40));
     }
 
+    if ($brcode=='TEL') {
+      array_push($lines, bpad("ALQUIROS, FILIBERTO S.", 40));
+      array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));
+      array_push($lines, bpad("GILIGAN'S SM TELABASTAGAN", 40));
+      array_push($lines, bpad("SM CITY MACARTHUR HIGHWAY,BRGY TEL.", 40));
+      array_push($lines, bpad("CITY OF SAN FERNANDO, PAMPANGA 2000", 40));
+      array_push($lines, bpad(" #133-162-738-009 VAT", 40));
+      array_push($lines, bpad("S/N HYSZ180000913", 40));
+      array_push($lines, bpad("MIN# 18102517185907060", 40));
+    }
+
     return $lines;
 
   }
