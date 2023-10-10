@@ -3874,6 +3874,8 @@ class Eod extends Command
     // print_r($c);
 
     // $newfile = $this->getOut().DS.$value;
+    if (!is_dir($this->getPath().DS.$date->format('Y')))
+      mkdir($this->getPath().DS.$date->format('Y'), 0755, true);
 
     $dc = $this->getPath().DS.$date->format('Y').DS.$date->format('m_Y').'_transactions.csv';
     $this->joinFiles($c, $dc);
@@ -3883,7 +3885,6 @@ class Eod extends Command
 
     $this->verifyCopyFile($dc, $this->getOut().DS.$date->format('m_Y').'_transactions.csv');
     $this->verifyCopyFile($ds, $this->getOut().DS.$date->format('m_Y').'_transactiondetails.csv');
-
 
   }
 
