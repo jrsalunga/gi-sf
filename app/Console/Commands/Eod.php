@@ -10,7 +10,7 @@ use Spatie\ArrayToXml\ArrayToXml;
 class Eod extends Command
 {
   // php artisan eod 2021-02-26 --lessorcode=yic
-  protected $signature = 'eod {date : YYYY-MM-DD} {--lessorcode= : File Extension} {--ext=csv : File Extension} {--mode=eod : Run Mode} {--dateTo=NULL : Date To}';
+  protected $signature = 'eod {date : YYYY-MM-DD} {--lessorcode= : File Extension} {--ext=csv : File Extension} {--mode=eod : Run Mode} {--dateTo= : Date To}';
   protected $description = 'Command description';
   private $excel;
   private $sysinfo;
@@ -52,7 +52,12 @@ class Eod extends Command
 
     if (strtolower($this->option('mode'))==='eod') {
       alog('Starting...');
-      //$this->info($this->sysinfo->trandate);
+
+      if (is_null($this->option('dateTo'))) {
+        $this->info('NULL');
+      } else {
+        $this->info('!NULL');
+      }
 
       if ($lessorcode!='sia')
         if ($date->gte(Carbon::now()))
@@ -227,7 +232,8 @@ class Eod extends Command
         break;
         case 'SIA':
         $dir = 'C:'.DS.'SIA';
-        mdir($dir);
+        if (!is_dir($dir))
+          mdir($dir);
         return $this->out = $dir;
         break;
       default:
@@ -3596,13 +3602,17 @@ class Eod extends Command
           "Terminal #",
           "Serial #",
         ];
+
+
+
         
+        $dt = Carbon::parse($vfpdate->format('Y-m-d')." ".$data['ordtime']);
 
         $arr[$i] = [
           $data['cslipno'],
           $vfpdate->format('Y-m-d'),
           $vfpdate->format('Y-m-d')." ".$data['ordtime'],
-          $vfpdate->format('Y-m-d')." ".$data['ordtime'],
+          $dt->copy()->addMinutes(rand(1,7))->addSecond(rand(1,59))->format('Y-m-d H:i:s'),
           'SM01',
           $trxtype,
           0, // Void
@@ -3659,7 +3669,7 @@ class Eod extends Command
           $jcb,
           $oth_ccard,
           1,
-          "HYSZ190000479"
+          "JRS82886"
         ];
          
 
@@ -3834,7 +3844,7 @@ class Eod extends Command
 
 
   private function siaCombine(Carbon $date, $ext='csv') {
-    $cnt = 5;
+    $cnt = 30;
     $ctr = 0;
     $c = [];
     $s = [];
@@ -3849,7 +3859,7 @@ class Eod extends Command
       if (file_exists($pc))
         array_push($c, $pc);
       // else
-      //   $this->info('WARNING: '.$pr.' doesn\'t exist!');
+      //   $this->info('WARNING: '.$pc.' doesn\'t exist!');
 
       $ps = $this->getStoragePath().DS.$d->format('Y').DS.$d->format('m').DS.$d->format('Ymd').'-SALESMTD.csv';
       if (file_exists($ps))
