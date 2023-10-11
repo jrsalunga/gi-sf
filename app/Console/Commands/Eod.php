@@ -54,18 +54,29 @@ class Eod extends Command
       alog('Starting...');
 
       if (is_null($this->option('dateTo'))) {
-        $this->info('NULL');
+        if ($lessorcode!='sia')
+          if ($date->gte(Carbon::now()))
+            $this->checkOrder();
+
+          $this->checkCashAudit($date);
+          $this->generateEod($date, $lessorcode, $ext);
       } else {
-        $this->info('!NULL');
+        $this->info('!NULL so generateEodByDr!');
+
+        $to = $this->option('dateTo');
+        if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $to)) {
+          $to = $date;        
+        } else {
+          $to = Carbon::parse($to);
+          if ($to->lt($date))
+            $to = $date;        
+        }
+        $this->generateEodByDr($date, $to, $lessorcode);
+
+
       }
 
-      if ($lessorcode!='sia')
-        if ($date->gte(Carbon::now()))
-          $this->checkOrder();
-
-      $this->checkCashAudit($date);
-
-      $this->generateEod($date, $lessorcode, $ext);
+      
 
     } else if (strtolower($this->option('mode'))==='resend') {
       $this->info('running on resend mode');
@@ -363,11 +374,67 @@ class Eod extends Command
     $this->{$lessor}($date, $ext);
   }
 
+  private function generateEodByDr(Carbon $fr, Carbon $to, $lessor, $ext='CSV') {
+    $this->info($fr);
+    $this->info($lessor);
+
+    $lessor = empty($lessor) 
+      ? strtolower($this->sysinfo->lessorcode)
+      : $lessor;
+    
+    if (empty($lessor)) {
+      alog('Error: LESSORINFO on SYSINFO.DBF is empty.');
+      throw new Exception("Error: LESSORINFO on SYSINFO.DBF is empty."); 
+    }
+    
+    if (!in_array($lessor, $this->lessors)){
+      alog('Error: No lessor found.');
+      throw new Exception("Error: No lessor found."); 
+    }
+
+    $this->lessor = strtoupper($lessor);
+
+
+    $this->info('lessor: '.$this->lessor);
+    $this->info('to: '.$to);
+    $this->info($this->getPath());
+    $this->info('diff: '.$fr->diffInDays($to));
+
+
+    $d = $fr->copy();
+    for ($i=0; $i <= $to->diffInDays($fr); $i++) { 
+      $this->info($i.' '.$d);
+      $this->date = $d;
+
+      
+
+      if ($lessor!='sia')
+        if ($d->gte(Carbon::now()))
+          $this->checkOrder();
+
+      $this->checkCashAudit($d);
+      $this->generateEod($d, $lessor, $ext);
+
+      // sleep(3);
+      $d->addDay();
+
+    }
+
+
+
+
+
+
+
+
+
+  }
+
   private function resend(Carbon $date, $to, $lessor) {
     $this->info($date);
     $this->info($lessor);
 
-     $lessor = empty($lessor) 
+    $lessor = empty($lessor) 
       ? strtolower($this->sysinfo->lessorcode)
       : $lessor;
     
