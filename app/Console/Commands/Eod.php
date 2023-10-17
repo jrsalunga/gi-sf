@@ -406,8 +406,6 @@ class Eod extends Command
       $this->info($i.' '.$d);
       $this->date = $d;
 
-      
-
       if ($lessor!='sia')
         if ($d->gte(Carbon::now()))
           $this->checkOrder();
@@ -419,15 +417,6 @@ class Eod extends Command
       $d->addDay();
 
     }
-
-
-
-
-
-
-
-
-
   }
 
   private function resend(Carbon $date, $to, $lessor) {
@@ -3604,7 +3593,7 @@ class Eod extends Command
           $oth_tender = $data['tot_chrg'];
         }
 
-
+        $vatable = $data['tot_chrg'] - $vat; // this is the Net Sales Amount
 
         $_arr[0] = [
           "Order Num",
@@ -3670,8 +3659,6 @@ class Eod extends Command
           "Serial #",
         ];
 
-
-
         
         $dt = Carbon::parse($vfpdate->format('Y-m-d')." ".$data['ordtime']);
 
@@ -3690,7 +3677,7 @@ class Eod extends Command
           $sr_cust,
           $pwd_cust,
           $data['chrg_grs'],
-          $data['tot_chrg'],
+          $vatable, //$data['tot_chrg'], // Net Sales Amount
           $vat,
           0, // Other Local Tax
           0, // Total Service Charge
