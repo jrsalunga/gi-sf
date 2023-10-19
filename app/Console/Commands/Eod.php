@@ -3827,10 +3827,23 @@ class Eod extends Command
               }
               
               // $this->info($disc[$data['cslipno']][1].' '.$disc[$data['cslipno']][4].' '.$disc_pct.' '.$data['qty'].' '.$x);
-              
-
               // $this->info($s[$data['cslipno']]);
+          }
 
+
+          switch ($data['productcode']) {
+            case 'ZRMEAL':
+              $menucat = 'ZRMEAL';
+              $prodcat = 'Foods';
+              break;
+            case 'MISC':
+              $menucat = 'MISC';
+              $prodcat = $data['prodcat'];
+              break;
+            default:
+              $menucat = $data['menucat'];
+              $prodcat = $data['prodcat'];
+              break;
           }
 
 
@@ -3862,8 +3875,8 @@ class Eod extends Command
             $data['cslipno'],
             $data['productcode'],
             $data['product'],
-            $data['prodcat'],
-            $data['menucat'],
+            $prodcat,
+            $menucat,
             "", // Item SubCategory
             $data['qty'],
             number_format($data['netamt']-$x,2),
