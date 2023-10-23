@@ -3427,27 +3427,25 @@ class Eod extends Command
           // $this->info($data['grschrg'].' '.$data['disc_type'].'='.$data['disc_amt'].'  '.$data['card_name']);
           // $this->info($data['card_name']);
           
-          if ($data['sr_body']==1) { // if 1 lang senior
+          // if ($data['sr_body']==1) { // if 1 lang senior
             
-            $vat_xmpt_sales = $data['tot_chrg'];
-            // $pos = str_contains($data['card_name'], 'PWD');
-            // $this->info($pos);
-            if (str_contains($data['card_name'], 'PWD')) {
-              $pwd_cust = $data['sr_body'];
-              $tot_disc_name = 'PWD';
-              $r_disc[$ctr++]['PWD']=$data['disc_amt'];
-              $pwd = $data['disc_amt'];
-            } else {
-              $sr_cust = $data['sr_body'];
-              $tot_disc_name = 'SC';
-              $r_disc[$ctr++]['SC']=$data['disc_amt'];
-              $sr = $data['disc_amt'];
-            }
-          } else {
+          //   $vat_xmpt_sales = $data['tot_chrg'];
+          //   if (str_contains($data['card_name'], 'PWD')) {
+          //     $pwd_cust = $data['sr_body'];
+          //     $tot_disc_name = 'PWD';
+          //     $r_disc[$ctr++]['PWD']=$data['disc_amt'];
+          //     $pwd = $data['disc_amt'];
+          //   } else {
+          //     $sr_cust = $data['sr_body'];
+          //     $tot_disc_name = 'SC';
+          //     $r_disc[$ctr++]['SC']=$data['disc_amt'];
+          //     $sr = $data['disc_amt'];
+          //   }
+          // } else {
             $vat_xmpt_sales = $data['tot_chrg'];
             $sr_cust = $data['sr_body'];
             $tot_disc_name = 'SC';
-          }
+          // }
 
 
 
