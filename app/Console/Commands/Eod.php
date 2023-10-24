@@ -3426,26 +3426,36 @@ class Eod extends Command
           
           // $this->info($data['grschrg'].' '.$data['disc_type'].'='.$data['disc_amt'].'  '.$data['card_name']);
           // $this->info($data['card_name']);
-          
-          // if ($data['sr_body']==1) { // if 1 lang senior
+
+
+
+          if (app()->environment()=='local')  {
+            if ($data['sr_body']==1) { // if 1 lang senior
             
-          //   $vat_xmpt_sales = $data['tot_chrg'];
-          //   if (str_contains($data['card_name'], 'PWD')) {
-          //     $pwd_cust = $data['sr_body'];
-          //     $tot_disc_name = 'PWD';
-          //     $r_disc[$ctr++]['PWD']=$data['disc_amt'];
-          //     $pwd = $data['disc_amt'];
-          //   } else {
-          //     $sr_cust = $data['sr_body'];
-          //     $tot_disc_name = 'SC';
-          //     $r_disc[$ctr++]['SC']=$data['disc_amt'];
-          //     $sr = $data['disc_amt'];
-          //   }
-          // } else {
+              $vat_xmpt_sales = $data['tot_chrg'];
+              if (str_contains($data['card_name'], 'PWD')) {
+                $pwd_cust = $data['sr_body'];
+                $tot_disc_name = 'PWD';
+                $r_disc[$ctr++]['PWD']=$data['disc_amt'];
+                $pwd = $data['disc_amt'];
+              } else {
+                $sr_cust = $data['sr_body'];
+                $tot_disc_name = 'SC';
+                $r_disc[$ctr++]['SC']=$data['disc_amt'];
+                $sr = $data['disc_amt'];
+              }
+            } else {
+              $vat_xmpt_sales = $data['tot_chrg'];
+              $sr_cust = $data['sr_body'];
+              $tot_disc_name = 'SC';
+            }
+          } else {
             $vat_xmpt_sales = $data['tot_chrg'];
             $sr_cust = $data['sr_body'];
             $tot_disc_name = 'SC';
-          // }
+          }
+          
+          
 
 
 
@@ -3631,11 +3641,13 @@ class Eod extends Command
           "Disc Field 3 Name",
           "Disc Field 4 Name",
           "Disc Field 5 Name",
+          "Disc Field 6 Name",
           "Disc Field 1 Amount",
           "Disc Field 2 Amount",
           "Disc Field 3 Amount",
           "Disc Field 4 Amount",
           "Disc Field 5 Amount",
+          "Disc Field 6 Amount",
           "Payment Type 1",
           "Payment Amt 1",
           "Payment Type 2",
@@ -3698,11 +3710,13 @@ class Eod extends Command
           "", // Disc Field 3 Name
           "", // Disc Field 4 Name
           "", // Disc Field 5 Name
+          "", // Disc Field 6 Name
           0, // Disc Field 1 Amount
           0, // Disc Field 2 Amount
           0, // Disc Field 3 Amount
           0, // Disc Field 4 Amount
           0, // Disc Field 5 Amount
+          0, // Disc Field 6 Amount
           $pay_type,
           $pay_amt,
           "", // Payment Type 2
@@ -3909,34 +3923,37 @@ class Eod extends Command
 
 
   private function siaCombine(Carbon $date, $ext='csv') {
-    $cnt = 30;
+    $cnt = 31;
     $ctr = 0;
     $c = [];
     $s = [];
+    $dd = [];
     array_push($c, $this->getStoragePath().DS.'HEADER-CHARGES.csv');
     array_push($s, $this->getStoragePath().DS.'HEADER-SALESMTD.csv');
-    
+
+    $d = $date->copy()->subday($cnt);
+    // $this->info($d->format('Y-m-d'));
+
     do {
 
-      $d = $date->copy()->subday($ctr);
+      $d->addDay();
+      array_push($dd, $d->format('Y-m-d'));
 
       $pc = $this->getStoragePath().DS.$d->format('Y').DS.$d->format('m').DS.$d->format('Ymd').'-CHARGES.csv';
       if (file_exists($pc))
         array_push($c, $pc);
       // else
-      //   $this->info('WARNING: '.$pc.' doesn\'t exist!');
+        // $this->info('WARNING: '.$pc.' doesn\'t exist!');
 
       $ps = $this->getStoragePath().DS.$d->format('Y').DS.$d->format('m').DS.$d->format('Ymd').'-SALESMTD.csv';
       if (file_exists($ps))
         array_push($s, $ps);
       // else
       //   $this->info('WARNING: '.$ps.' doesn\'t exist!');
-
       $ctr++;
     } while ($ctr<$cnt);
 
-
-    // print_r($c);
+    // print_r($dd);
 
     // $newfile = $this->getOut().DS.$value;
     if (!is_dir($this->getPath().DS.$date->format('Y')))
@@ -3951,6 +3968,7 @@ class Eod extends Command
     $this->verifyCopyFile($dc, $this->getOut().DS.$date->format('m_Y').'_transactions.csv');
     $this->verifyCopyFile($ds, $this->getOut().DS.$date->format('m_Y').'_transactiondetails.csv');
 
+    $this->info(' ');
   }
 
   private function joinFiles(array $files, $result) {
