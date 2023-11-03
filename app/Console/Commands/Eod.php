@@ -72,12 +72,7 @@ class Eod extends Command
             $to = $date;        
         }
         $this->generateEodByDr($date, $to, $lessorcode);
-
-
       }
-
-      
-
     } else if (strtolower($this->option('mode'))==='resend') {
       $this->info('running on resend mode');
       $this->getOut();
@@ -95,8 +90,6 @@ class Eod extends Command
     } else {
       $this->info('Error: unknown mode');
     }
-
-    
   }
 
   private function getSysinfo($r) {
