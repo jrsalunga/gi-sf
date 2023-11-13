@@ -3446,6 +3446,7 @@ class Eod extends Command
             $vat_xmpt_sales = $data['tot_chrg'];
             $sr_cust = $data['sr_body'];
             $tot_disc_name = 'SC';
+            $sr = $data['disc_amt'];
           }
           
           
