@@ -10,7 +10,7 @@ use Spatie\ArrayToXml\ArrayToXml;
 class Eod extends Command
 {
   // php artisan eod 2021-02-26 --lessorcode=yic
-  protected $signature = 'eod {date : YYYY-MM-DD} {--lessorcode= : File Extension} {--ext=csv : File Extension} {--mode=eod : Run Mode} {--dateTo= : Date To}';
+  protected $signature = 'eod {date : YYYY-MM-DD} {--lessorcode= : File Extension} {--ext=csv : File Extension} {--mode=eod : Run Mode} {--dateTo= : Date To}  {--hour= : Hour}';
   protected $description = 'Command description';
   private $excel;
   private $sysinfo;
@@ -23,7 +23,7 @@ class Eod extends Command
       $this->excel = $excel;
       $this->sysinfo();
       $this->extracted_path = 'C:\\GI_GLO';
-      $this->lessors = ['pro', 'aol', 'yic', 'ocl', 'pla', 'ver', 'sia'];
+      $this->lessors = ['pro', 'aol', 'yic', 'ocl', 'pla', 'ver', 'sia', 'ali'];
       $this->path = 'C:\\EODFILES';      
   }
 
@@ -234,8 +234,14 @@ class Eod extends Command
         mdir($dir);
         return $this->out = $dir;
         break;
-        case 'SIA':
-        $dir = 'C:'.DS.'SIA';
+      case 'SIA':
+        $dir = 'D:'.DS.'SIA';
+        if (!is_dir($dir))
+          mdir($dir);
+        return $this->out = $dir;
+        break;
+      case 'ALI':
+        $dir = 'D:'.DS.'AYALA'.DS.$this->date->format('Y').DS.$this->date->format('m').DS.$this->date->format('d');
         if (!is_dir($dir))
           mdir($dir);
         return $this->out = $dir;
@@ -258,6 +264,9 @@ class Eod extends Command
       alog('ERROR - Generating: '.$file);
     }
 
+    if (!is_dir($this->out))
+        mdir($this->out);
+
     if ((!is_null($this->out) || !empty($this->out)) && is_dir($this->out)) {  
 
       //$this->info('OK - Drive: '.$this->out);
@@ -265,9 +274,16 @@ class Eod extends Command
 
       //$this->info('Copying: '.$file);
       //$this->info($newfile);
+
+      $p = pathinfo($newfile);
+
+      if (!is_dir($p['dirname']))
+        mdir($p['dirname']);
+
+
       alog('Copying: '.$file.' - '.$newfile);
-      if (copy($file, $newfile)) {
-        $this->info('OK - Copying: '.$newfile);
+      if (copy($file, $this->out.DS.$newfile)) {
+        $this->info('OK - Copying: '.$this->out.DS.$newfile);
         alog($file.' - Success on copying');
       } else {
         $this->info('ERROR - Copying: '.$file);
@@ -3206,10 +3222,7 @@ class Eod extends Command
 
     $newfile = $this->out.DS.$filename.'.'.$ext;
 
-    $this->verifyCopyFile($file, $newfile);
-
-
-     
+    $this->verifyCopyFile($file, $newfile);  
   }
 
 
@@ -3783,7 +3796,7 @@ class Eod extends Command
     } else
       $this->info('SALESMTD.DBF not found!');
     return [];
-}
+  }
 
 
   private function siaSalesmtd(Carbon $date, array $disc, array $s, $ext='csv') {
@@ -3985,14 +3998,708 @@ class Eod extends Command
     unset($wH);
 
     // joinFiles(array('join1.csv', 'join2.csv'), 'join3.csv');
-}
+  }
 
 
   /*********************************************************** end: SIA ****************************************/
 
 
 
+  /*********************************************************** ALI ****************************************/
+  public function ALI(Carbon $date, $ext) {
 
+    $this->aliCharges($date);
+  }
+
+  private function aliGetItem(Carbon $date, $cslipno, $table_no) {
+    $dbf_file = $this->extracted_path.DS.'SALESMTD.DBF';
+    if (file_exists($dbf_file)) {
+      $db = dbase_open($dbf_file, 0);
+      
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);
+
+      $ctr = 0;
+      $items = [];
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
+        } catch(Exception $e) {
+          continue;
+        }
+
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) { // if salesmtd date == backup date
+          $data = $this->associateSalesmtd($row);
+
+          //if ($data['cslipno']==$cslipno) {
+          if ($data['cslipno']==$cslipno && ($data['tblno']==$table_no || strtolower($data['tblno'])=='zrmeal')) {
+
+            if (empty($data['productcode'])) { // update:20190728
+              if (empty($data['product']))
+                $data['productcode'] = 'MISC';
+              else
+                $data['productcode'] = $data['product'];
+            } // end:update:20190728
+
+            $items[$ctr]['QTY']      = number_format($data['qty'], 3,'.','');
+            $items[$ctr]['ITEMCODE'] = $data['productcode'];
+            $items[$ctr]['PRICE']    = number_format($data['netamt'], 2,'.','');
+            $items[$ctr]['LDISC']    = number_format(0, 2,'.','');
+            $ctr++;
+          }
+        }
+      }
+
+      return $items;
+    }
+
+  }
+
+  private function aliGetTrans(Carbon $date, array $row) {
+
+    $vat = $vtble = $ves = $vea = 0;
+    if ($row['sr_disc']>0) {
+      $ves = $row['tot_chrg'];
+      $vea = $row['vat_xmpt'];
+      $tcust = $row['sr_body'];
+
+    } else {
+      $vat = $row['vat'];
+      $vtble = $row['tot_chrg']-$row['vat'];
+      $tcust = $row['sr_tcust']-$row['sr_body'];
+    }
+
+    $oth_disc = $row['dis_gpc']+$row['dis_vip']+$row['dis_udisc']+$row['dis_prom'];
+
+    $master = $visa = $amex = $jcb = $diners = $charge = $cash = $other_pay = 0; 
+    $gcash = $maya = $alipay = $wechat = $grab = $panda = $epay = 0; 
+
+
+    // CASH or CHARGE sales
+    if ($row['chrg_type']=='CASH') {
+      $cash = $row['tot_chrg']; //total cash sales
+    } else 
+
+    if (in_array($row['chrg_type'], ['CHARGE', 'MAYA', 'BDO', 'BANKARD'])) {
+
+      $pay_type = $row['card_type'];
+      switch (trim($row['card_type'])) {
+        case 'MASTER':
+          $master = $row['tot_chrg'];
+          $charge = $row['tot_chrg'];
+          break;
+        case 'VISA':
+          $visa = $row['tot_chrg'];
+          $charge = $row['tot_chrg'];
+          break;
+        case 'AMEX':
+          $amex = $row['tot_chrg'];
+          $charge = $row['tot_chrg'];
+          break;
+        case 'DINERS':
+          $diners = $row['tot_chrg'];
+          $charge = $row['tot_chrg'];
+          break;
+        case 'JCB':
+          $jcb = $row['tot_chrg'];
+          $charge = $row['tot_chrg'];
+          break;
+        case 'GCASH':
+          $gcash = $row['tot_chrg'];
+          $epay = $row['tot_chrg'];
+          break;
+        case 'MAYA':
+          $maya = $row['tot_chrg'];
+          $epay = $row['tot_chrg'];
+          break;
+        case 'PAYMAYA':
+          $maya = $row['tot_chrg'];
+          $epay = $row['tot_chrg'];
+          break;
+        case 'ALI':
+          $alipay = $row['tot_chrg'];
+          $epay = $row['tot_chrg'];
+          break;
+        case 'WECHATPAY':
+          $wechat = $row['tot_chrg'];
+          $epay = $row['tot_chrg'];
+          break;
+        case 'SHOPEE':
+        case 'SHOPEEPAY':
+        case 'QRPH':
+        case 'GRABPAY':
+          $epay = $row['tot_chrg'];
+          break;
+        default:
+          $other_pay = $row['tot_chrg'];
+          break;
+      }
+    } else
+
+    if (in_array($row['chrg_type'], ['GRAB', 'PANDA'])) {
+      if ($row['chrg_type']=='GRAB')
+        $grab = $row['tot_chrg'];
+      if ($row['chrg_type']=='PANDA')
+        $panda = $row['tot_chrg'];
+      $other_pay = $row['tot_chrg'];
+    } else { // ZAP
+      $other_pay = $row['tot_chrg'];
+    }
+
+    //Sale Type
+    if (in_array($row['saletype'], ['CALPUP', 'ONLCUS']))
+      $saletype = 'O';
+    else if (in_array($row['saletype'], ['CALWED', 'ONLRID','ONLWED'])) 
+      $saletype = 'C';
+    else
+      $saletype = 'D';
+
+    $items = $this->aliGetItem($date, $row['cslipno'], $row['tblno']);
+    
+    $datas = [
+      'CDATE' => $row['vfpdate']->format('Y-m-d'),
+      'TRN_TIME' => $row['vfpdate']->format('H:i'),
+      'TER_NO' => (trim($this->sysinfo->pos_no)+0),
+      'TRANSACTION_NO' => $row['cslipno'],
+      'GROSS_SLS' => number_format($row['chrg_grs'], 2,'.',''),
+      'VAT_AMNT' => number_format($vat, 2,'.',''),
+      'VATABLE_SLS' => number_format($vtble, 2,'.',''),
+      'NONVAT_SLS' => number_format(0, 2,'.',''),
+      'VATEXEMPT_SLS' => number_format($ves, 2,'.',''),
+      'VATEXEMPT_AMNT' => number_format($vea, 2,'.',''),
+      'LOCAL_TAX' => number_format(0, 2,'.',''),
+      'PWD_DISC' => number_format($row['dis_pwd'], 2,'.',''),
+      'SNRCIT_DISC' => number_format($row['sr_disc'], 2,'.',''),
+      'EMPLO_DISC' => number_format($row['dis_emp'], 2,'.',''),
+      'AYALA_DISC' => number_format(0, 2,'.',''),
+      'STORE_DISC' => number_format(0, 2,'.',''),
+      'OTHER_DISC' => number_format($oth_disc, 2,'.',''),
+      'REFUND_AMT' => number_format(0, 2,'.',''),
+      'SCHRGE_AMT' => number_format(0, 2,'.',''),
+      'OTHER_SCHR' => number_format(0, 2,'.',''),
+      'CASH_SLS' => number_format($cash, 2,'.',''),
+      'CARD_SLS' => number_format($charge, 2,'.',''),
+      'EPAY_SLS' => number_format($epay, 2,'.',''),
+      'DCARD_SLS' => number_format(0, 2,'.',''),
+      'OTHERSL_SLS' => number_format($other_pay, 2,'.',''),
+      'CHECK_SLS' => number_format(0, 2,'.',''),
+      'GC_SLS' => number_format(0, 2,'.',''),
+      'MASTERCARD_SLS' => number_format($master, 2,'.',''),
+      'VISA_SLS' => number_format($visa, 2,'.',''),
+      'AMEX_SLS' => number_format($amex, 2,'.',''),
+      'DINERS_SLS' => number_format($diners, 2,'.',''),
+      'JCB_SLS' => number_format($jcb, 2,'.',''),
+      'GCASH_SLS' => number_format($gcash, 2,'.',''),
+      'PAYMAYA_SLS' => number_format($maya, 2,'.',''),
+      'ALIPAY_SLS' => number_format($alipay, 2,'.',''),
+      'WECHAT_SLS' => number_format($wechat, 2,'.',''),
+      'GRAB_SLS' => number_format($grab, 2,'.',''),
+      'FOODPANDA_SLS' => number_format($panda, 2,'.',''),
+      'MASTERDEBIT_SLS' => number_format(0, 2,'.',''),
+      'VISADEBIT_SLS' => number_format(0, 2,'.',''),
+      'PAYPAL_SLS' => number_format(0, 2,'.',''),
+      'ONLINE_SLS' => number_format(0, 2,'.',''),
+      'OPEN_SALES' => number_format(0, 2,'.',''),
+      'OPEN_SALES_2' => number_format(0, 2,'.',''),
+      'OPEN_SALES_3' => number_format(0, 2,'.',''),
+      'OPEN_SALES_4' => number_format(0, 2,'.',''),
+      'OPEN_SALES_5' => number_format(0, 2,'.',''),
+      'OPEN_SALES_6' => number_format(0, 2,'.',''),
+      'OPEN_SALES_7' => number_format(0, 2,'.',''),
+      'OPEN_SALES_8' => number_format(0, 2,'.',''),
+      'OPEN_SALES_9' => number_format(0, 2,'.',''),
+      'OPEN_SALES_10' => number_format(0, 2,'.',''),
+      'OPEN_SALES_11' => number_format(0, 2,'.',''),
+      'GC_EXCESS' => number_format(0, 2,'.',''),
+      'MOBILE_NO' => '',
+      'NO_CUST' => number_format($tcust, 0,'.',''),
+      'TRN_TYPE' => $saletype,
+      'SLS_FLG' => 'S',
+      'VAT_PCT' => number_format(1.12, 2,'.',''),
+      'QTY_SLD' => count($items),
+
+      'ITEMS' => $this->aliGetItem($date, $row['cslipno'], $row['tblno'])
+    ];
+
+    return $datas;
+  }
+
+
+  private  function aliGenHourlyCsv(Carbon $date, array $data, $hr, $last_cslipno, $head) {
+    // $this->info('create hourly file: '.$hr.' '.$last_cslipno);
+    // $path = $this->getStoragePath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d').DS.$filename;
+
+    $filename = $head['CCCODE'].$date->format('mdy').(trim($this->sysinfo->pos_no)+0).'_'.$last_cslipno.'.csv';
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
+    if (!is_dir($dir))
+      mdir($dir);
+    $file = $dir.DS.$filename;
+    $fp = fopen($file, 'w');
+
+    $head['NO_TRN'] = count($data[$hr]);
+
+    foreach ($head as $key => $value) {
+      $ln = '"'.$key.'","'.$value.'"'; // on productiom
+      fwrite($fp, $ln.PHP_EOL);
+    }
+
+    foreach ($data[$hr] as $rcpt) {
+      foreach ($rcpt as $k => $v) 
+      if ($k==='ITEMS') {
+        foreach ($v as $m => $n)
+          foreach ($n as $o => $p) {
+            $ln = '"'.$o.'","'.$p.'"'; 
+            fwrite($fp, $ln.PHP_EOL);
+          }
+      } else {
+        $ln = '"'.$k.'","'.$v.'"'; 
+        fwrite($fp, $ln.PHP_EOL);
+      }
+    }
+
+    $this->verifyCopyFile($file, $filename);
+  }
+
+
+  private function aliGenEodCsv(Carbon $date, array $data) {
+    
+    $datas = [
+      'CCCODE' => $data[1],
+      'MERCHANT_NAME' => $data[2],
+      'TER_NO' => $data[3],
+      'TRN_DATE' => $data[4],
+      'STRANS' => $data[5],
+      'ETRANS' => $data[6],
+      'GROSS_SLS' => number_format($data[7], 2, '.', ''),
+      'VAT_AMNT' => number_format($data[8], 2, '.', ''),
+      'VATABLE_SLS' => number_format($data[9], 2, '.', ''),
+      'NONVAT_SLS' => number_format(0, 2, '.', ''),
+      'VATEXEMPT_SLS' => number_format($data[11], 2, '.', ''),
+      'VATEXEMPT_AMNT' => number_format($data[12], 2, '.', ''),
+      'OLD_GRNTOT' => number_format($data[13], 2, '.', ''),
+      'NEW_GRNTOT' => number_format($data[14], 2, '.', ''),
+      'LOCAL_TAX' => number_format(0, 2, '.', ''),
+      'VOID_AMNT' => number_format(0, 2, '.', ''),
+      'NO_VOID' => number_format(0, 0, '.', ''),
+      'DISCOUNTS' => number_format($data[18], 2, '.', ''),
+      'NO_DISC' => number_format($data[19], 0, '.', ''),
+      'REFUND_AMT' => number_format(0, 2, '.', ''),
+      'NO_REFUND' => number_format(0, 0, '.', ''),
+      'SNRCIT_DISC' => number_format($data[22], 2, '.', ''),
+      'NO_SNRCIT' => number_format($data[23], 0, '.', ''),
+      'PWD_DISC' => number_format(0, 2, '.', ''),
+      'NO_PWD' => number_format(0, 0, '.', ''),
+      'EMPLO_DISC' => number_format($data[26], 2, '.', ''),
+      'NO_EMPLO' => number_format($data[27], 0, '.', ''),
+      'AYALA_DISC' => number_format(0, 2, '.', ''),
+      'NO_AYALA' => number_format(0, 0, '.', ''), // 29
+      'STORE_DISC' => number_format(0, 2, '.', ''), // 30
+      'NO_STORE' => number_format(0, 0, '.', ''), // 31
+      'OTHER_DISC' => number_format($data[31], 2, '.', ''), // 31?
+      'NO_OTHER_DISC' => number_format($data[32], 0, '.', ''),
+      'SCHRGE_AMT' => number_format(0, 2, '.', ''),
+      'OTHER_SCHR' => number_format(0, 2, '.', ''),
+      'CASH_SLS' => number_format($data[35], 2, '.', ''),
+      'CARD_SLS' => number_format($data[36], 2, '.', ''),
+      'EPAY_SLS' => number_format($data[37], 2, '.', ''),
+      'DCARD_SLS' => number_format(0, 2, '.', ''),
+      'OTHER_SLS' => number_format($data[39], 2, '.', ''),
+      'CHECK_SLS' => number_format(0, 2, '.', ''),
+      'GC_SLS' => number_format(0, 2, '.', ''),
+      'MASTERCARD_SLS' => number_format($data[42], 2, '.', ''),
+      'VISA_SLS' => number_format($data[43], 2, '.', ''),
+      'AMEX_SLS' => number_format($data[44], 2, '.', ''),
+      'DINERS_SLS' => number_format($data[45], 2, '.', ''),
+      'JCB_SLS' => number_format($data[46], 2, '.', ''),
+      'GCASH_SLS' => number_format($data[47], 2, '.', ''),
+      'PAYMAYA_SLS' => number_format($data[48], 2, '.', ''),
+      'ALIPAY_SLS' => number_format($data[49], 2, '.', ''),
+      'WECHAT_SLS' => number_format($data[50], 2, '.', ''),
+      'GRAB_SLS' => number_format($data[51], 2, '.', ''),
+      'FOODPANDA_SLS' => number_format($data[52], 2, '.', ''),
+      'MASTERDEBIT_SLS' => number_format(0, 2, '.', ''),
+      'VISADEBIT_SLS' => number_format(0, 2, '.', ''),
+      'PAYPAL_SLS' => number_format(0, 2, '.', ''),
+      'ONLINE_SLS' => number_format(0, 2, '.', ''),
+      'OPEN_SALES' => number_format(0, 2, '.', ''),
+      'OPEN_SALES_2' => number_format(0, 2, '.', ''),
+      'OPEN_SALES_3' => number_format(0, 2, '.', ''),
+      'OPEN_SALES_4' => number_format(0, 2, '.', ''),
+      'OPEN_SALES_5' => number_format(0, 2, '.', ''),
+      'OPEN_SALES_6' => number_format(0, 2, '.', ''),
+      'OPEN_SALES_7' => number_format(0, 2, '.', ''),
+      'OPEN_SALES_8' => number_format(0, 2, '.', ''),
+      'OPEN_SALES_9' => number_format(0, 2, '.', ''),
+      'OPEN_SALES_10' => number_format(0, 2, '.', ''),
+      'OPEN_SALES_11' => number_format(0, 2, '.', ''),
+      'GC_EXCESS' => number_format(0, 2, '.', ''),
+      'NO_VATEXEMT' => number_format($data[69], 0, '.', ''),
+      'NO_SCHRGE' => number_format(0, 0, '.', ''),
+      'NO_OTHER_SUR' => number_format(0, 0, '.', ''),
+      'NO_CASH' => number_format($data[72], 0, '.', ''),
+      'NO_CARD' => number_format($data[73], 0, '.', ''),
+      'NO_EPAY' => number_format($data[74], 0, '.', ''),
+      'NO_DCARD_SLS' => number_format(0, 0, '.', ''),
+      'NO_OTHER_SLS' => number_format(0, 0, '.', ''),
+      'NO_CHECK' => number_format(0, 0, '.', ''),
+      'NO_GC' => number_format(0, 0, '.', ''),
+      'NO_MASTERCARD_SLS' => number_format($data[79], 0, '.', ''),
+      'NO_VISA_SLS' => number_format($data[80], 0, '.', ''),
+      'NO_AMEX_SLS' => number_format($data[81], 0, '.', ''),
+      'NO_DINERS_SLS' => number_format($data[82], 0, '.', ''),
+      'NO_JCB_SLS' => number_format($data[83], 0, '.', ''),
+      'NO_GCASH_SLS' => number_format($data[84], 0, '.', ''),
+      'NO_PAYMAYA_SLS' => number_format($data[85], 0, '.', ''),
+      'NO_ALIPAY_SLS' => number_format($data[86], 0, '.', ''),
+      'NO_WECHAT_SLS' => number_format($data[87], 0, '.', ''),
+      'NO_GRAB_SLS' => number_format($data[88], 0, '.', ''),
+      'NO_FOODPANDA_SLS' => number_format($data[89], 0, '.', ''),
+      'NO_MASTERDEBIT_SLS' => number_format(0, 0, '.', ''),
+      'NO_VISADEBIT_SLS' => number_format(0, 0, '.', ''),
+      'NO_PAYPAL_SLS' => number_format(0, 0, '.', ''),
+      'NO_ONLINE_SLS' => number_format(0, 0, '.', ''),
+      'NO_OPEN_SALES' => number_format(0, 0, '.', ''),
+      'NO_OPEN_SALES_2' => number_format(0, 0, '.', ''),
+      'NO_OPEN_SALES_3' => number_format(0, 0, '.', ''),
+      'NO_OPEN_SALES_4' => number_format(0, 0, '.', ''),
+      'NO_OPEN_SALES_5' => number_format(0, 0, '.', ''),
+      'NO_OPEN_SALES_6' => number_format(0, 0, '.', ''),
+      'NO_OPEN_SALES_7' => number_format(0, 0, '.', ''),
+      'NO_OPEN_SALES_8' => number_format(0, 0, '.', ''),
+      'NO_OPEN_SALES_9' => number_format(0, 0, '.', ''),
+      'NO_OPEN_SALES_10' => number_format(0, 0, '.', ''),
+      'NO_OPEN_SALES_11' => number_format(0, 0, '.', ''),
+      'NO_NOSALE' => number_format(0, 2, '.', ''),
+      'NO_CUST' => number_format($data[107], 0, '.', ''),
+      'NO_TRN' => number_format($data[108], 0, '.', ''),
+      'PREV_EODCTR' => number_format($data[109], 0, '.', ''),
+      'EODCTR' => number_format($data[110], 0, '.', ''),
+    ];
+
+
+    $filename = 'EOD'.$datas['CCCODE'].$date->format('mdy').'.csv';
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
+    if (!is_dir($dir))
+      mdir($dir);
+    $file = $dir.DS.$filename;
+    $fp = fopen($file, 'w');
+
+    foreach ($datas as $key => $value) {
+      $ln = '"'.$key.'","'.$value.'"'; // on productiom
+      fwrite($fp, $ln.PHP_EOL);
+    }
+
+    // $newpath = 'C:'.DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d').DS.$filename;
+
+    $this->verifyCopyFile($file, $filename);
+  }
+
+  private function aliCharges(Carbon $date) {
+    $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
+    if (file_exists($dbf_file)) {
+      $db = dbase_open($dbf_file, 0);
+      
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);
+      $update = 0;
+      $flag = false;
+      $now = Carbon::now();
+      $data = [];
+
+      $head = [
+        'CCCODE' => trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract),
+        'MERCHANT_NAME' => trim($this->sysinfo->tenantname),
+        'TRN_DATE' => $date->format('Y-m-d'),
+        // 'TER_NO' => trim($this->sysinfo->pos_no),
+      ];
+      
+      $data['EOD'][1] = trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract);
+      $data['EOD'][2] = trim($this->sysinfo->tenantname);
+      $data['EOD'][3] = (trim($this->sysinfo->pos_no)+0);
+      $data['EOD'][4] = $date->format('Y-m-d');
+      $data['EOD'][6] = $data['EOD'][5] = NULL;
+
+      
+      foreach (range(7,108) as $k => $v)
+        $data['EOD'][$v] = 0;
+      
+      $data['EOD'][109] = trim($this->sysinfo->zread_ctr);
+      $data['EOD'][110] = trim($this->sysinfo->zread_ctr)+1;
+
+      $ds = [];
+
+
+      $tmp_hr = NULL;
+      $last_cslipno = NULL;
+
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
+        } catch(Exception $e) {
+          continue;
+        }
+        
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+
+          $dt = Carbon::parse($vfpdate->format('Y-m-d').' '.trim($row['ORDTIME']));
+          // $this->info($dt->format('H').' '.($now->format('H')-1).' '.$now->format('H'));
+            $r = $this->associateAttributes($row);
+            
+            // if ($h0 == $r['vfpdate']->format('H')) 
+            //   $this->info($r['vfpdate']->format('Y-m-d H:i:s'));
+
+            // if ($h1 == $r['vfpdate']->format('H'))
+            //   $this->info($r['vfpdate']->format('Y-m-d H:i:s'));
+
+
+            // if (is_null($tmp_hr)) {
+            //   $tmp_hr = $r['vfpdate']->format('H');
+            //   $data[$tmp_hr] = [];
+            // }
+
+            if ($tmp_hr == $r['vfpdate']->format('H')) {
+              // $this->info($update.' '.$r['vfpdate']->format('Y-m-d H:i:s').' '.$r['cslipno']);
+              $data[$tmp_hr][$update] = $this->aliGetTrans($date, $r); //****************************************************************************/
+
+
+              $last_cslipno = $r['cslipno'];
+            } else {
+              if (!is_null($tmp_hr)) {
+
+                
+                // generate hourly CSV
+                $this->aliGenHourlyCsv($date, $data, $tmp_hr, $last_cslipno, $head); //****************************************************************************/
+                
+                $tmp_hr = $r['vfpdate']->format('H');
+                $data[$tmp_hr] = [];        
+
+              } else {
+
+                $tmp_hr = $r['vfpdate']->format('H');
+                // $this->info('this is 1st run'.' '.$tmp_hr);
+              }
+              
+              // $this->info($update.' '.$r['vfpdate']->format('Y-m-d H:i:s').' '.$r['cslipno']);
+              $data[$tmp_hr][$update] = $this->aliGetTrans($date, $r); //****************************************************************************/
+
+              
+              if (is_null($last_cslipno))
+                $last_cslipno = $r['cslipno'];
+            }
+
+
+
+            if (is_null($data['EOD'][5]))
+              $data['EOD'][5] = $r['cslipno'];
+            $data['EOD'][6] = $r['cslipno'];
+            
+            $data['EOD'][7] += $r['chrg_grs'];
+
+
+            if ($r['sr_disc']>0) {
+              $data['EOD'][11] += $r['tot_chrg']; // vat exmpt sales
+              $data['EOD'][12] += $r['vat_xmpt']; // vat exmpt samount
+              
+              $data['EOD'][22] += $r['sr_disc']; // senior disc amt
+              $data['EOD'][23] += $r['sr_body']; // senior pax
+              $data['EOD'][69]++; // # of vat xmpt trans
+              
+              $data['EOD'][107] += $r['sr_body']; // total customer
+            } else {
+
+              $data['EOD'][8] += $r['vat']; // vat amount
+              $data['EOD'][9] += $r['tot_chrg']; // vatable amount
+
+
+
+              // compute emp disc
+              if ($r['dis_emp']>0) {
+                $data['EOD'][26] +=$r['dis_emp']; // total disc amt
+                $data['EOD'][27]++; // total disc trans
+              }
+              // compute other disc
+              if ($r['dis_gpc']>0 || $r['dis_vip']>0 || $r['dis_pwd']>0 || $r['dis_udisc']>0 || $r['dis_prom']>0) {
+                $data['EOD'][31] +=($r['dis_gpc']+$r['dis_vip']+$r['dis_pwd']+$r['dis_udisc']+$r['dis_prom']); // total disc amt
+                $data['EOD'][32]++; // total disc trans
+              }
+
+
+              $data['EOD'][107] += ($r['sr_tcust']-$r['sr_body']); // total customer
+            }
+
+            if ($r['sr_disc']>0 || $r['oth_disc']>0 || $r['u_disc']>0 || $r['promo_amt']>0) {
+              $data['EOD'][18] +=$r['disc_amt']; // total disc amt
+              $data['EOD'][19]++; // total disc trans
+
+              // $this->info($r['disc_type'].' '.$r['disc_amt']);
+            }
+
+
+            // CASH or CHARGE sales
+            if ($r['chrg_type']=='CASH') {
+              $data['EOD'][35] += $r['tot_chrg']; //total cash sales
+              $data['EOD'][72]++; // total cash trans
+            } else 
+
+            if (in_array($r['chrg_type'], ['CHARGE', 'MAYA', 'BDO', 'BANKARD'])) {
+
+              switch (trim($r['card_type'])) {
+                case 'MASTER':
+                  $data['EOD'][36] += $r['tot_chrg'];
+                  $data['EOD'][42] += $r['tot_chrg'];
+                  $data['EOD'][73]++;
+                  $data['EOD'][79]++;
+                  break;
+                case 'VISA':
+                  $data['EOD'][36] += $r['tot_chrg'];
+                  $data['EOD'][43] += $r['tot_chrg'];
+                  $data['EOD'][73]++;
+                  $data['EOD'][80]++;
+                  break;
+                case 'AMEX':
+                  $data['EOD'][36] += $r['tot_chrg'];
+                  $data['EOD'][44] += $r['tot_chrg'];
+                  $data['EOD'][73]++;
+                  $data['EOD'][81]++;
+                  break;
+                case 'DINERS':
+                  $data['EOD'][36] += $r['tot_chrg'];
+                  $data['EOD'][45] += $r['tot_chrg'];
+                  $data['EOD'][73]++;
+                  $data['EOD'][82]++;
+                  break;
+                case 'JCB':
+                  $data['EOD'][36] += $r['tot_chrg'];
+                  $data['EOD'][46] += $r['tot_chrg'];
+                  $data['EOD'][73]++;
+                  $data['EOD'][83]++;
+                  break;
+                case 'GCASH':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][47] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][84]++;
+                  break;
+                case 'MAYA':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][48] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][85]++;
+                  break;
+                case 'PAYMAYA':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][48] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][85]++;
+                  break;
+                case 'ALIPAY':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][49] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][86]++;
+                  break;
+                case 'ALI':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][49] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][86]++;
+                  break;               
+                case 'WECHATPAY':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][50] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][87]++;
+                  break;
+                case 'WECHAT':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][50] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][87]++;
+                  break;
+                default:
+                  $data['EOD'][39] += $r['tot_chrg'];
+                  $data['EOD'][76]++;
+                  break;
+              }
+            } else
+
+            if (in_array($r['chrg_type'], ['GRAB', 'PANDA'])) {
+              $data['EOD'][39] += $r['tot_chrg'];
+              $data['EOD'][76]++;
+              if ($r['chrg_type']=='GRAB') {
+                $data['EOD'][51] += $r['tot_chrg'];
+                $data['EOD'][88]++;
+              }
+              if ($r['chrg_type']=='PANDA') {
+                $data['EOD'][52] += $r['tot_chrg'];
+                $data['EOD'][89]++;
+              }
+            } else { // ZAP
+              $data['EOD'][39] += $r['tot_chrg'];
+              $data['EOD'][76]++;
+            }
+
+
+
+        $update++;  
+        $data['EOD'][108]++;
+       }
+
+      if (!$flag && $vfpdate->gt($date)) {
+        // $this->info('last run.........');
+        // generate last hourly CSV
+        $this->aliGenHourlyCsv($date, $data, $tmp_hr, $r['cslipno'], $head); /****************************************************************************/
+        $flag = true;
+      }
+    }
+
+    $this->aliGenEodCsv($date, $data['EOD']);
+
+    // print_r($data['EOD']);
+    
+    dbase_close($db);
+    return $ds;
+
+
+  } else {
+    throw new Exception("Cannot locate CHARGES.DBF"); 
+  }
+
+
+
+
+
+
+  }
+    
+  private function aliDaily(Carbon $date, $c) {
+
+    $ext = str_pad($this->sysinfo->pos_no, 3, '0', STR_PAD_LEFT);
+    $filename = $date->format('mdY');
+
+    //$this->info(' ');
+    
+    exit;
+
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
+    if(!is_dir($dir))
+        mkdir($dir, 0775, true);
+    $file = $dir.DS.$filename.'.'.$ext;
+    $fp = fopen($file, 'w');
+
+  }
+
+
+
+  //$d = $this->aliCharges($date, $ext);
+
+
+  /*********************************************************** end: ALI ****************************************/
 
 
   public function associateAttributes($r) {
