@@ -3971,9 +3971,10 @@ class Eod extends Command
     $ds = $this->getPath().DS.$date->format('Y').DS.$date->format('m_Y').'_transactiondetails.csv';
     $this->joinFiles($s, $ds);
 
-
-    $this->verifyCopyFile($dc, $this->getOut().DS.$date->format('m_Y').'_transactions.csv');
-    $this->verifyCopyFile($ds, $this->getOut().DS.$date->format('m_Y').'_transactiondetails.csv');
+    // $this->verifyCopyFile($dc, $this->getOut().DS.$date->format('m_Y').'_transactions.csv');
+    // $this->verifyCopyFile($ds, $this->getOut().DS.$date->format('m_Y').'_transactiondetails.csv');
+    $this->verifyCopyFile($dc, $date->format('m_Y').'_transactions.csv');
+    $this->verifyCopyFile($ds, $date->format('m_Y').'_transactiondetails.csv');
 
     $this->info(' ');
   }
@@ -4052,15 +4053,13 @@ class Eod extends Command
           }
         }
       }
-
       return $items;
     }
-
   }
 
   private function aliGetTrans(Carbon $date, array $row) {
 
-    $vat = $vtble = $ves = $vea = 0;
+    $vat = $vtble = $ves = $vea = $qty_sld = 0;
     if ($row['sr_disc']>0) {
       $ves = $row['tot_chrg'];
       $vea = $row['vat_xmpt'];
@@ -4144,7 +4143,7 @@ class Eod extends Command
         $grab = $row['tot_chrg'];
       if ($row['chrg_type']=='PANDA')
         $panda = $row['tot_chrg'];
-      $other_pay = $row['tot_chrg'];
+      // $other_pay = $row['tot_chrg'];
     } else { // ZAP
       $other_pay = $row['tot_chrg'];
     }
@@ -4158,11 +4157,13 @@ class Eod extends Command
       $saletype = 'D';
 
     $items = $this->aliGetItem($date, $row['cslipno'], $row['tblno']);
+    foreach($items as $k => $v)
+      $qty_sld += $v['QTY'];
     
     $datas = [
       'CDATE' => $row['vfpdate']->format('Y-m-d'),
       'TRN_TIME' => $row['vfpdate']->format('H:i'),
-      'TER_NO' => (trim($this->sysinfo->pos_no)+0),
+      'TER_NO' => str_pad($this->sysinfo->pos_no, 3, 0, STR_PAD_LEFT),
       'TRANSACTION_NO' => $row['cslipno'],
       'GROSS_SLS' => number_format($row['chrg_grs'], 2,'.',''),
       'VAT_AMNT' => number_format($vat, 2,'.',''),
@@ -4217,9 +4218,10 @@ class Eod extends Command
       'MOBILE_NO' => '',
       'NO_CUST' => number_format($tcust, 0,'.',''),
       'TRN_TYPE' => $saletype,
-      'SLS_FLG' => 'S',
+      'SLS_FLAG' => 'S',
       'VAT_PCT' => number_format(1.12, 2,'.',''),
-      'QTY_SLD' => count($items),
+      'QTY_SLD' => number_format($qty_sld, 3,'.',''),
+      // 'QTY_SLD' => number_format(count($items), 3,'.',''),
 
       'ITEMS' => $this->aliGetItem($date, $row['cslipno'], $row['tblno'])
     ];
@@ -4229,10 +4231,8 @@ class Eod extends Command
 
 
   private  function aliGenHourlyCsv(Carbon $date, array $data, $hr, $last_cslipno, $head) {
-    // $this->info('create hourly file: '.$hr.' '.$last_cslipno);
-    // $path = $this->getStoragePath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d').DS.$filename;
 
-    $filename = $head['CCCODE'].$date->format('mdy').(trim($this->sysinfo->pos_no)+0).'_'.$last_cslipno.'.csv';
+    $filename = $head['CCCODE'].$date->format('mdy').str_pad($this->sysinfo->pos_no, 3, 0, STR_PAD_LEFT).'_'.$last_cslipno.'.csv';
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
     if (!is_dir($dir))
       mdir($dir);
@@ -4242,7 +4242,7 @@ class Eod extends Command
     $head['NO_TRN'] = count($data[$hr]);
 
     foreach ($head as $key => $value) {
-      $ln = '"'.$key.'","'.$value.'"'; // on productiom
+      $ln = $key.','.$value; 
       fwrite($fp, $ln.PHP_EOL);
     }
 
@@ -4251,11 +4251,11 @@ class Eod extends Command
       if ($k==='ITEMS') {
         foreach ($v as $m => $n)
           foreach ($n as $o => $p) {
-            $ln = '"'.$o.'","'.$p.'"'; 
+            $ln = $o.','.$p; 
             fwrite($fp, $ln.PHP_EOL);
           }
       } else {
-        $ln = '"'.$k.'","'.$v.'"'; 
+        $ln = $k.','.$v; 
         fwrite($fp, $ln.PHP_EOL);
       }
     }
@@ -4265,7 +4265,6 @@ class Eod extends Command
 
 
   private function aliGenEodCsv(Carbon $date, array $data) {
-    
     $datas = [
       'CCCODE' => $data[1],
       'MERCHANT_NAME' => $data[2],
@@ -4280,7 +4279,7 @@ class Eod extends Command
       'VATEXEMPT_SLS' => number_format($data[11], 2, '.', ''),
       'VATEXEMPT_AMNT' => number_format($data[12], 2, '.', ''),
       'OLD_GRNTOT' => number_format($data[13], 2, '.', ''),
-      'NEW_GRNTOT' => number_format($data[14], 2, '.', ''),
+      'NEW_GRNTOT' => number_format(($data[14]+$data[111]), 2, '.', ''),
       'LOCAL_TAX' => number_format(0, 2, '.', ''),
       'VOID_AMNT' => number_format(0, 2, '.', ''),
       'NO_VOID' => number_format(0, 0, '.', ''),
@@ -4372,7 +4371,7 @@ class Eod extends Command
       'NO_OPEN_SALES_9' => number_format(0, 0, '.', ''),
       'NO_OPEN_SALES_10' => number_format(0, 0, '.', ''),
       'NO_OPEN_SALES_11' => number_format(0, 0, '.', ''),
-      'NO_NOSALE' => number_format(0, 2, '.', ''),
+      'NO_NOSALE' => number_format(0, 0, '.', ''),
       'NO_CUST' => number_format($data[107], 0, '.', ''),
       'NO_TRN' => number_format($data[108], 0, '.', ''),
       'PREV_EODCTR' => number_format($data[109], 0, '.', ''),
@@ -4388,11 +4387,9 @@ class Eod extends Command
     $fp = fopen($file, 'w');
 
     foreach ($datas as $key => $value) {
-      $ln = '"'.$key.'","'.$value.'"'; // on productiom
+      $ln = $key.','.$value; // on productiom
       fwrite($fp, $ln.PHP_EOL);
     }
-
-    // $newpath = 'C:'.DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d').DS.$filename;
 
     $this->verifyCopyFile($file, $filename);
   }
@@ -4413,7 +4410,6 @@ class Eod extends Command
         'CCCODE' => trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract),
         'MERCHANT_NAME' => trim($this->sysinfo->tenantname),
         'TRN_DATE' => $date->format('Y-m-d'),
-        // 'TER_NO' => trim($this->sysinfo->pos_no),
       ];
       
       $data['EOD'][1] = trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract);
@@ -4428,10 +4424,9 @@ class Eod extends Command
       
       $data['EOD'][109] = trim($this->sysinfo->zread_ctr);
       $data['EOD'][110] = trim($this->sysinfo->zread_ctr)+1;
+      $data['EOD'][111] = 0;
 
       $ds = [];
-
-
       $tmp_hr = NULL;
       $last_cslipno = NULL;
 
@@ -4450,18 +4445,6 @@ class Eod extends Command
           // $this->info($dt->format('H').' '.($now->format('H')-1).' '.$now->format('H'));
             $r = $this->associateAttributes($row);
             
-            // if ($h0 == $r['vfpdate']->format('H')) 
-            //   $this->info($r['vfpdate']->format('Y-m-d H:i:s'));
-
-            // if ($h1 == $r['vfpdate']->format('H'))
-            //   $this->info($r['vfpdate']->format('Y-m-d H:i:s'));
-
-
-            // if (is_null($tmp_hr)) {
-            //   $tmp_hr = $r['vfpdate']->format('H');
-            //   $data[$tmp_hr] = [];
-            // }
-
             if ($tmp_hr == $r['vfpdate']->format('H')) {
               // $this->info($update.' '.$r['vfpdate']->format('Y-m-d H:i:s').' '.$r['cslipno']);
               $data[$tmp_hr][$update] = $this->aliGetTrans($date, $r); //****************************************************************************/
@@ -4470,7 +4453,6 @@ class Eod extends Command
               $last_cslipno = $r['cslipno'];
             } else {
               if (!is_null($tmp_hr)) {
-
                 
                 // generate hourly CSV
                 $this->aliGenHourlyCsv($date, $data, $tmp_hr, $last_cslipno, $head); //****************************************************************************/
@@ -4506,14 +4488,15 @@ class Eod extends Command
               $data['EOD'][12] += $r['vat_xmpt']; // vat exmpt samount
               
               $data['EOD'][22] += $r['sr_disc']; // senior disc amt
-              $data['EOD'][23] += $r['sr_body']; // senior pax
+              // $data['EOD'][23] += $r['sr_body']; // senior pax
+              $data['EOD'][23]++; // senior disc trx
               $data['EOD'][69]++; // # of vat xmpt trans
               
               $data['EOD'][107] += $r['sr_body']; // total customer
             } else {
 
               $data['EOD'][8] += $r['vat']; // vat amount
-              $data['EOD'][9] += $r['tot_chrg']; // vatable amount
+              $data['EOD'][9] += ($r['tot_chrg']-$r['vat']); // vatable amount
 
 
 
@@ -4527,16 +4510,12 @@ class Eod extends Command
                 $data['EOD'][31] +=($r['dis_gpc']+$r['dis_vip']+$r['dis_pwd']+$r['dis_udisc']+$r['dis_prom']); // total disc amt
                 $data['EOD'][32]++; // total disc trans
               }
-
-
               $data['EOD'][107] += ($r['sr_tcust']-$r['sr_body']); // total customer
             }
 
             if ($r['sr_disc']>0 || $r['oth_disc']>0 || $r['u_disc']>0 || $r['promo_amt']>0) {
               $data['EOD'][18] +=$r['disc_amt']; // total disc amt
               $data['EOD'][19]++; // total disc trans
-
-              // $this->info($r['disc_type'].' '.$r['disc_amt']);
             }
 
 
@@ -4644,30 +4623,25 @@ class Eod extends Command
               $data['EOD'][76]++;
             }
 
-
-
         $update++;  
         $data['EOD'][108]++;
-       }
+        $data['EOD'][111] += $r['tot_chrg']; // NETSALES
+        }
 
-      if (!$flag && $vfpdate->gt($date)) {
-        // $this->info('last run.........');
-        // generate last hourly CSV
-        $this->aliGenHourlyCsv($date, $data, $tmp_hr, $r['cslipno'], $head); /****************************************************************************/
-        $flag = true;
-      }
-    }
+        if (!$flag && $vfpdate->gt($date)) {
+          // $this->info('last run.........');
+          // generate last hourly CSV
+          $this->aliGenHourlyCsv($date, $data, $tmp_hr, $r['cslipno'], $head); /****************************************************************************/
+          $flag = true;
+        }
+      } // end:for 
 
-    $this->aliGenEodCsv($date, $data['EOD']);
-
-    // print_r($data['EOD']);
-    
-    dbase_close($db);
-    return $ds;
-
-
-  } else {
-    throw new Exception("Cannot locate CHARGES.DBF"); 
+      $this->aliGenEodCsv($date, $data['EOD']);
+      // print_r($data['EOD']);
+      dbase_close($db);
+      return $ds;
+    } else {
+      throw new Exception("Cannot locate CHARGES.DBF"); 
   }
 
 
@@ -4688,7 +4662,7 @@ class Eod extends Command
 
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
     if(!is_dir($dir))
-        mkdir($dir, 0775, true);
+      mkdir($dir, 0775, true);
     $file = $dir.DS.$filename.'.'.$ext;
     $fp = fopen($file, 'w');
 
