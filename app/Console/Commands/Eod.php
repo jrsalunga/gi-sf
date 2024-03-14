@@ -3461,12 +3461,6 @@ class Eod extends Command
             $tot_disc_name = 'SC';
             $sr = $data['disc_amt'];
           }
-          
-          
-
-
-
-
         
         } else {
           $tcust = $data['sr_tcust'] - $data['sr_body'];
@@ -3474,14 +3468,10 @@ class Eod extends Command
         }
 
 
-
         // $this->info($data['grschrg'].' '.$data['disc_type'].'='.$data['disc_amt'].'  '.$data['card_name'].'  '.$data['chrg_type'].'  '.$data['card_type']);
-
 
         //** Discounts
         $tot_disc = $data['promo_amt'] + $data['sr_disc'] + $data['oth_disc'] + $data['u_disc'];
-        
-
 
 
         $a = ['DIS_PWD', 'DIS_UDISC', 'DIS_PROM', 'DIS_G', 'DIS_H', 'DIS_I', 'DIS_J', 'DIS_K', 'DIS_L', 'DIS_VX'];
@@ -3492,7 +3482,6 @@ class Eod extends Command
 
             $r_disc[$ctr++][explode('_', $value)[1]]=$row[$value];
 
-
             if (empty($oth_disc_name) && empty($oth_disc_amt)) {
               $oth_disc_name = explode('_', $value)[1];
               $oth_disc_amt = $row[$value];
@@ -3500,10 +3489,6 @@ class Eod extends Command
               $oth_disc_name = $oth_disc_name.'::'.explode('_', $value)[1];
               $oth_disc_amt = $oth_disc_amt.'::'.$row[$value];
             }
-
-
-            
-
           } 
         }
         
@@ -3742,7 +3727,7 @@ class Eod extends Command
           $jcb,
           $oth_ccard,
           1,
-          "JRS82886"
+          "JRS82887"
         ];
          
 
