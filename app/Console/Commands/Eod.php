@@ -3727,7 +3727,7 @@ class Eod extends Command
           $jcb,
           $oth_ccard,
           1,
-          "JRS82887"
+          trim($this->sysinfo->serialno)
         ];
          
 
