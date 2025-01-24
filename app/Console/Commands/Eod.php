@@ -23,7 +23,7 @@ class Eod extends Command
       $this->excel = $excel;
       $this->sysinfo();
       $this->extracted_path = 'C:\\GI_GLO';
-      $this->lessors = ['pro', 'aol', 'yic', 'ocl', 'pla', 'ver', 'sia', 'ali'];
+      $this->lessors = ['pro', 'aol', 'yic', 'ocl', 'pla', 'ver', 'sia', 'ali', 'rlc'];
       $this->path = 'C:\\EODFILES';      
   }
 
@@ -4379,6 +4379,7 @@ class Eod extends Command
     $this->verifyCopyFile($file, $filename);
   }
 
+
   private function aliCharges(Carbon $date) {
     $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
     if (file_exists($dbf_file)) {
@@ -4427,7 +4428,7 @@ class Eod extends Command
         if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
 
           $dt = Carbon::parse($vfpdate->format('Y-m-d').' '.trim($row['ORDTIME']));
-          // $this->info($dt->format('H').' '.($now->format('H')-1).' '.$now->format('H'));
+            // $this->info($dt->format('H').' '.($now->format('H')-1).' '.$now->format('H'));
             $r = $this->associateAttributes($row);
             
             if ($tmp_hr == $r['vfpdate']->format('H')) {
@@ -4613,6 +4614,7 @@ class Eod extends Command
         $data['EOD'][111] += $r['tot_chrg']; // NETSALES
         }
 
+        $this->aliGenHourlyCsv($date, $data, $tmp_hr, $r['cslipno'], $head); /****************************************************************************/
         if (!$flag && $vfpdate->gt($date)) {
           // $this->info('last run.........');
           // generate last hourly CSV
@@ -4627,13 +4629,257 @@ class Eod extends Command
       return $ds;
     } else {
       throw new Exception("Cannot locate CHARGES.DBF"); 
+    }
   }
 
+  private function aliCharges_v1(Carbon $date) {
+    $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
+    if (file_exists($dbf_file)) {
+      $db = dbase_open($dbf_file, 0);
+      
+      $header = dbase_get_header_info($db);
+      $record_numbers = dbase_numrecords($db);
+      $update = 0;
+      $flag = false;
+      $now = Carbon::now();
+      $data = [];
+
+      $head = [
+        'CCCODE' => trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract),
+        'MERCHANT_NAME' => trim($this->sysinfo->tenantname),
+        'TRN_DATE' => $date->format('Y-m-d'),
+      ];
+      
+      $data['EOD'][1] = trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract);
+      $data['EOD'][2] = trim($this->sysinfo->tenantname);
+      $data['EOD'][3] = (trim($this->sysinfo->pos_no)+0);
+      $data['EOD'][4] = $date->format('Y-m-d');
+      $data['EOD'][6] = $data['EOD'][5] = NULL;
+
+      
+      foreach (range(7,108) as $k => $v)
+        $data['EOD'][$v] = 0;
+      
+      $data['EOD'][109] = trim($this->sysinfo->zread_ctr);
+      $data['EOD'][110] = trim($this->sysinfo->zread_ctr)+1;
+      $data['EOD'][111] = 0;
+
+      $ds = [];
+      $tmp_hr = NULL;
+      $last_cslipno = NULL;
+
+
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
+        } catch(Exception $e) {
+          continue;
+        }
+        
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+
+          $dt = Carbon::parse($vfpdate->format('Y-m-d').' '.trim($row['ORDTIME']));
+          $r = $this->associateAttributes($row);
+            
+          // $this->info($dt->format('H').' '.($now->format('H')-1).' '.$now->format('H'));
+            
+          if ($tmp_hr == $r['vfpdate']->format('H')) {
+            // $this->info($update.' '.$r['vfpdate']->format('Y-m-d H:i:s').' '.$r['cslipno']);
+            $data[$tmp_hr][$update] = $this->aliGetTrans($date, $r); //****************************************************************************/
+
+
+            $last_cslipno = $r['cslipno'];
+          } else {
+            if (!is_null($tmp_hr)) {
+              
+              // generate hourly CSV
+              $this->aliGenHourlyCsv($date, $data, $tmp_hr, $last_cslipno, $head); //****************************************************************************/
+              
+              $tmp_hr = $r['vfpdate']->format('H');
+              $data[$tmp_hr] = [];        
+
+            } else {
+
+              $tmp_hr = $r['vfpdate']->format('H');
+              // $this->info('this is 1st run'.' '.$tmp_hr);
+            }
+            
+            // $this->info($update.' '.$r['vfpdate']->format('Y-m-d H:i:s').' '.$r['cslipno']);
+            $data[$tmp_hr][$update] = $this->aliGetTrans($date, $r); //****************************************************************************/
+
+            
+            if (is_null($last_cslipno))
+              $last_cslipno = $r['cslipno'];
+          }
 
 
 
+            if (is_null($data['EOD'][5]))
+              $data['EOD'][5] = $r['cslipno'];
+            $data['EOD'][6] = $r['cslipno'];
+            
+            $data['EOD'][7] += $r['chrg_grs'];
 
 
+            if ($r['sr_disc']>0) {
+              $data['EOD'][11] += $r['tot_chrg']; // vat exmpt sales
+              $data['EOD'][12] += $r['vat_xmpt']; // vat exmpt samount
+              
+              $data['EOD'][22] += $r['sr_disc']; // senior disc amt
+              // $data['EOD'][23] += $r['sr_body']; // senior pax
+              $data['EOD'][23]++; // senior disc trx
+              $data['EOD'][69]++; // # of vat xmpt trans
+              
+              $data['EOD'][107] += $r['sr_body']; // total customer
+            } else {
+
+              $data['EOD'][8] += $r['vat']; // vat amount
+              $data['EOD'][9] += ($r['tot_chrg']-$r['vat']); // vatable amount
+
+
+
+              // compute emp disc
+              if ($r['dis_emp']>0) {
+                $data['EOD'][26] +=$r['dis_emp']; // total disc amt
+                $data['EOD'][27]++; // total disc trans
+              }
+              // compute other disc
+              if ($r['dis_gpc']>0 || $r['dis_vip']>0 || $r['dis_pwd']>0 || $r['dis_udisc']>0 || $r['dis_prom']>0) {
+                $data['EOD'][31] +=($r['dis_gpc']+$r['dis_vip']+$r['dis_pwd']+$r['dis_udisc']+$r['dis_prom']); // total disc amt
+                $data['EOD'][32]++; // total disc trans
+              }
+              $data['EOD'][107] += ($r['sr_tcust']-$r['sr_body']); // total customer
+            }
+
+            if ($r['sr_disc']>0 || $r['oth_disc']>0 || $r['u_disc']>0 || $r['promo_amt']>0) {
+              $data['EOD'][18] +=$r['disc_amt']; // total disc amt
+              $data['EOD'][19]++; // total disc trans
+            }
+
+
+            // CASH or CHARGE sales
+            if ($r['chrg_type']=='CASH') {
+              $data['EOD'][35] += $r['tot_chrg']; //total cash sales
+              $data['EOD'][72]++; // total cash trans
+            } else 
+
+            if (in_array($r['chrg_type'], ['CHARGE', 'MAYA', 'BDO', 'BANKARD'])) {
+
+              switch (trim($r['card_type'])) {
+                case 'MASTER':
+                  $data['EOD'][36] += $r['tot_chrg'];
+                  $data['EOD'][42] += $r['tot_chrg'];
+                  $data['EOD'][73]++;
+                  $data['EOD'][79]++;
+                  break;
+                case 'VISA':
+                  $data['EOD'][36] += $r['tot_chrg'];
+                  $data['EOD'][43] += $r['tot_chrg'];
+                  $data['EOD'][73]++;
+                  $data['EOD'][80]++;
+                  break;
+                case 'AMEX':
+                  $data['EOD'][36] += $r['tot_chrg'];
+                  $data['EOD'][44] += $r['tot_chrg'];
+                  $data['EOD'][73]++;
+                  $data['EOD'][81]++;
+                  break;
+                case 'DINERS':
+                  $data['EOD'][36] += $r['tot_chrg'];
+                  $data['EOD'][45] += $r['tot_chrg'];
+                  $data['EOD'][73]++;
+                  $data['EOD'][82]++;
+                  break;
+                case 'JCB':
+                  $data['EOD'][36] += $r['tot_chrg'];
+                  $data['EOD'][46] += $r['tot_chrg'];
+                  $data['EOD'][73]++;
+                  $data['EOD'][83]++;
+                  break;
+                case 'GCASH':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][47] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][84]++;
+                  break;
+                case 'MAYA':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][48] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][85]++;
+                  break;
+                case 'PAYMAYA':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][48] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][85]++;
+                  break;
+                case 'ALIPAY':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][49] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][86]++;
+                  break;
+                case 'ALI':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][49] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][86]++;
+                  break;               
+                case 'WECHATPAY':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][50] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][87]++;
+                  break;
+                case 'WECHAT':
+                  $data['EOD'][37] += $r['tot_chrg'];
+                  $data['EOD'][50] += $r['tot_chrg'];
+                  $data['EOD'][74]++;
+                  $data['EOD'][87]++;
+                  break;
+                default:
+                  $data['EOD'][39] += $r['tot_chrg'];
+                  $data['EOD'][76]++;
+                  break;
+              }
+            } else if (in_array($r['chrg_type'], ['GRAB', 'PANDA'])) {
+              $data['EOD'][39] += $r['tot_chrg'];
+              $data['EOD'][76]++;
+              if ($r['chrg_type']=='GRAB') {
+                $data['EOD'][51] += $r['tot_chrg'];
+                $data['EOD'][88]++;
+              }
+              if ($r['chrg_type']=='PANDA') {
+                $data['EOD'][52] += $r['tot_chrg'];
+                $data['EOD'][89]++;
+              }
+            } else { // ZAP
+              $data['EOD'][39] += $r['tot_chrg'];
+              $data['EOD'][76]++;
+            }
+
+          $update++;  
+          $data['EOD'][108]++;
+          $data['EOD'][111] += $r['tot_chrg']; // NETSALES
+        }
+
+        if (!$flag && $vfpdate->gt($date)) {
+          // $this->info('last run.........');
+          // generate last hourly CSV
+          $this->aliGenHourlyCsv($date, $data, $tmp_hr, $r['cslipno'], $head); /****************************************************************************/
+          $flag = true;
+        }
+      } // end:for 
+
+      $this->aliGenEodCsv($date, $data['EOD']);
+      // print_r($data['EOD']);
+      dbase_close($db);
+      return $ds;
+    } else {
+      throw new Exception("Cannot locate CHARGES.DBF"); 
+    }
   }
     
   private function aliDaily(Carbon $date, $c) {
@@ -4659,6 +4905,112 @@ class Eod extends Command
 
 
   /*********************************************************** end: ALI ****************************************/
+
+
+
+  /*********************************************************** RLC ****************************************/
+
+
+  public function RLC(Carbon $date) {
+    
+    $this->rlcSend($date);
+
+  }
+
+  public function rlcSend(Carbon $date) {
+
+
+    $e = ['1','2','3','4','5','6','7','8','9','A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z']; //33
+    $tid = substr(trim($this->sysinfo->tenantname),4);
+    $src_path = 'C:\RLC'.DS.$date->format('Y');
+    $filename = $tid.$date->format('md');
+    $fullpath = $src_path.DS.$filename.'.011';
+
+    if (file_exists($fullpath)) {
+    // $this->info('File found! ('.$fullpath.')');
+
+    // create json file sa database
+      $j = $this->getJsonData($date);
+
+      if (isset($j['send_counter'])) 
+        if ($j['send_counter']<34)
+          $ctr = $j['send_counter'];
+        else
+          $ctr = 34;
+      else
+        $ctr = 0; 
+    
+      $d_ext = '01'.$e[$ctr];
+      // $this->info('ctr: '.$ctr);
+
+      $newfile = $filename.'.'.$d_ext;
+
+      if (app()->environment()=='local') {
+        $connection = ssh2_connect('boss.giligansrestaurant.com', 22);
+        ssh2_auth_password($connection, 'server-admin', 'b33rpr0m0');
+        $res = ssh2_scp_send($connection, $fullpath, $newfile, 0644);
+      } else {
+        $connection = ssh2_connect(trim($this->sysinfo->ftp_ip, 22));
+        ssh2_auth_password($connection, trim($this->sysinfo->ftp_user), trim($this->sysinfo->ftp_pw));
+        $res = ssh2_scp_send($connection, $fullpath, $newfile, 0644);
+      }
+
+      if ($res==1) {
+        $this->toJson($date, [
+          'send_counter' => ($ctr+1)
+        ]);
+
+
+        $ftp_dir = 'C:\RLC'.DS.'FTP'.DS.$date->format('Y');
+        if (!is_dir($ftp_dir))
+          mdir($ftp_dir);
+
+        if (copy($fullpath, $ftp_dir.DS.$newfile)) {
+          $this->info('OK - Copying: '.$ftp_dir.DS.$newfile);
+        } else {
+          $this->info('ERROR - Copying: '.$ftp_dir.DS.$newfile);
+        }
+      } else {
+        $this->info('Error on sending thru SFTP');
+        exit;
+      }
+
+    } else {
+      $this->info('File not found! ('.$fullpath.')');
+    } // end: res
+
+
+
+
+
+
+    exit;
+
+    $this->info(json_encode($j));
+    // $this->info($e['0']);
+    $j = $this->getJsonData($date);
+    $this->info(json_encode($j));
+
+    $this->info($this->sysinfo->tenantname);
+
+
+    $connection = ssh2_connect('boss.giligansrestaurant.com', 22);
+    ssh2_auth_password($connection, 'server-admin', 'b33rpr0m0');
+
+    // $res = ssh2_scp_send($connection, 'C:\RLC\TEST.TXT', 'TEST.TXT', 0644);
+
+    $sftp = ssh2_sftp($connection);
+    $statinfo = ssh2_sftp_stat($sftp, 'TEST.TXT');
+
+    $this->info(json_encode($statinfo));
+
+
+
+    
+  }
+
+  /*********************************************************** end: RLC ****************************************/
+
 
 
   public function associateAttributes($r) {

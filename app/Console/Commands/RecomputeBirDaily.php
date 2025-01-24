@@ -5,10 +5,10 @@ use Exception;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
-class RecomputeBir extends Command
+class RecomputeBirDaily extends Command
 {
   
-  protected $signature = 'bir {brcode : Branch Code} {date : YYYY-MM-DD} {--dateTo=NULL : Date To} {--percentage=0 : Percentage} {--print=false : Print} {--final=false : Final}';
+  protected $signature = 'bir:daily {brcode : Branch Code} {date : YYYY-MM-DD} {--dateTo=NULL : Date To} {--percentage=0 : Percentage} {--print=false : Print} {--final=false : Final}';
 
   protected $description = 'Command description';
 
@@ -71,12 +71,12 @@ class RecomputeBir extends Command
     //$this->info(json_encode(\DB::connection('mysql-live')->getQueryLog()));
 
 
-    foreach ($this->monthInterval($date, $to) as $key => $d) {
+    foreach ($this->dailyInterval($date, $to) as $key => $d) {
       
       $this->info($d);
 
-      $date = $d->copy()->startOfMonth();
-      $to = $d->copy()->endOfMonth();
+      $date = $d;
+      $to = $d;
 
       $i = [];
       $i['gross'] = 0;
@@ -91,7 +91,7 @@ class RecomputeBir extends Command
       $ds = $this->compute($br, $date, $to);
 
 
-      //$this->info(print_r($ds));
+      // $this->info(print_r($ds));
 
 
       $i['gross']   = $ds['grschrg'];
@@ -121,7 +121,6 @@ class RecomputeBir extends Command
       // new format - match sa percentage ung cash and charge sales
       $ds['sale_cash'] = number_format((($ds['sale_cash']*($percent/100))), 2, '.', '');
       $ds['sale_chrg'] = number_format((($ds['sale_chrg']*($percent/100))), 2, '.', '');
-
 
 
       $ds['sale'] = $ds['sale_cash'] + $ds['sale_chrg'];
@@ -174,12 +173,12 @@ class RecomputeBir extends Command
       
   }
 
-  public function monthInterval($fr, $to){
+  public function dailyInterval($fr, $to){
     $fr = $fr->copy();
     $arr = [];
      do {
       array_push($arr, Carbon::parse($fr->format('Y-m-d')));
-    } while ($fr->addMonth() <= $to);
+    } while ($fr->addDay() <= $to);
 
     return $arr;
   }
@@ -295,8 +294,8 @@ class RecomputeBir extends Command
   private function toFile($brcode, $fr, $to, $lines, $terminalid=NULL) {
     
     $logfile = is_null($terminalid)
-      ? "C:\ZREPORT".DS.$brcode.DS.$fr->format('Y').DS.$fr->format('m').DS.'ZREAD-'.$fr->format('Ymd').'-'.$to->format('Ymd').'.txt'
-      : "C:\ZREPORT".DS.$brcode.DS.$fr->format('Y').DS.$fr->format('m').DS.'ZREAD-'.$fr->format('Ymd').'-'.$to->format('Ymd').'-'.$terminalid.'.txt';
+      ? "C:\ZREPORT".DS.$brcode.DS.$fr->format('Y').DS.$fr->format('m').DS.'ZREAD-'.$fr->format('Ymd').'.txt'
+      : "C:\ZREPORT".DS.$brcode.DS.$fr->format('Y').DS.$fr->format('m').DS.'ZREAD-'.$fr->format('Ymd').'-'.$terminalid.'.txt';
 
     $dir = pathinfo($logfile, PATHINFO_DIRNAME);
 
@@ -329,9 +328,6 @@ class RecomputeBir extends Command
     $heads = $this->getHeader($brcode);
 
     $lines = [];
-    array_push($lines, bpad(' ', 40));
-    array_push($lines, bpad(' ', 40));
-    array_push($lines, bpad(' ', 40));
 
     array_push($lines, bpad(' ', 40));
     foreach ($heads as $key => $h)
@@ -340,10 +336,10 @@ class RecomputeBir extends Command
     array_push($lines, bpad(' ', 40));
     array_push($lines, bpad(' ', 40));
 
-    array_push($lines, lpad("Z-READING REPORT : ".$fr->format('m/d/Y D'), 40));
-    array_push($lines, lpad("TO : ".$to->format('m/d/Y D'), 40));
+    array_push($lines, lpad("Z-READING REPORT :  ".$fr->format('m/d/Y D'), 40));
+    // array_push($lines, lpad("TO : ".$to->format('m/d/Y D'), 40));
 
-    array_push($lines, bpad(' ', 40));
+    // array_push($lines, bpad(' ', 40));
     array_push($lines, bpad(' ', 40));
 
     $sales = 0;
@@ -398,9 +394,6 @@ class RecomputeBir extends Command
 
     array_push($lines, bpad(' ***** END OF REPORT *****', 40));
 
-    array_push($lines, bpad(' ', 40));
-    array_push($lines, bpad(' ', 40));
-    array_push($lines, bpad(' ', 40));
     array_push($lines, bpad(' ', 40));
 
     return $lines;
@@ -699,18 +692,6 @@ class RecomputeBir extends Command
       array_push($lines, bpad("#010-264-107-012 VAT", 40));
       array_push($lines, bpad("S/N J5LV622", 40));
       array_push($lines, bpad("MIN# 2003031629338986", 40));
-    }
-
-
-    if ($brcode=='VMB') {
-      array_push($lines, bpad("GILIGANS HOLDINGS CORPORATION", 40));
-      array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));
-      array_push($lines, bpad("GILIGAN'S VISTAMALL MALOLOS", 40));
-      array_push($lines, bpad("2/F TBA VISTA MALL MALOLOS MCARTHUR", 40));
-      array_push($lines, bpad("HIGHWAY BRGY LONGOS MALOLOS, BULACAN", 40));
-      array_push($lines, bpad("#010-264-107-011 VAT", 40));
-      array_push($lines, bpad("S/N 63QHMW2AS", 40));
-      array_push($lines, bpad("MIN# 20030315411889836", 40));
     }
 
     return $lines;
