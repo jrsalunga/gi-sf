@@ -5122,7 +5122,12 @@ class Eod extends Command
 
       $ctr++;
       usleep(50000);
-    } while (intval($auth_res)==0);
+    } while (intval($auth_res)==0 && $ctr=<10);
+
+    if ($ctr=>10) {
+      throw new Exception('Could not connect to RLC Server. Check network connection', 500);
+      exit;
+    }
 
     return $sftp;
   }
