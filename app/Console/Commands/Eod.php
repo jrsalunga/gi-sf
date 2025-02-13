@@ -5096,8 +5096,7 @@ class Eod extends Command
   private function rlcGetSftpServer() {
 
     $msg = '';
-    $auth_res = 0;
-    $ctr = 0;
+    $auth_res = $ctr = 0;
     $try_connect = 10; 
     
     do {
