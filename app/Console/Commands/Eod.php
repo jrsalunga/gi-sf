@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Exception;
 use Illuminate\Console\Command;
 use Spatie\ArrayToXml\ArrayToXml;
+use phpseclib3\Net\SFTP;
 
 class Eod extends Command
 {
@@ -86,6 +87,17 @@ class Eod extends Command
           $to = $date;        
       }
       $this->resend($date, $to, $lessorcode);
+
+    } else if (strtolower($this->option('mode'))==='unsent') {
+      $this->info('running on unsent mode');
+      
+      $lessorUnsent = $lessorcode.'Unsent';
+
+      if (method_exists('\App\Console\Commands\Eod', $lessorUnsent)) {
+        $this->{$lessorUnsent}($date);
+      }
+
+
 
     } else {
       $this->info('Error: unknown mode');
@@ -4915,98 +4927,256 @@ class Eod extends Command
     
     $this->rlcSend($date);
 
+   //  $this->info('info success!');
+   //  $this->info('info success!');
+   //  $this->alert('alert success!');
+   //  $this->error('error success!');
+   //  $this->line('line success!');
+   //  $this->confirm('confirm success!');
+   //  $this->ask('ask success!');
+   //  $this->secret('secret success!');
+   //  $this->anticipate('anticipate success!');
   }
 
   public function rlcSend(Carbon $date) {
 
-
-    $e = ['1','2','3','4','5','6','7','8','9','A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z']; //33
     $tid = substr(trim($this->sysinfo->tenantname),4);
     $src_path = 'C:\RLC'.DS.$date->format('Y');
     $filename = $tid.$date->format('md');
     $fullpath = $src_path.DS.$filename.'.011';
 
     if (file_exists($fullpath)) {
-    // $this->info('File found! ('.$fullpath.')');
 
-    // create json file sa database
       $j = $this->getJsonData($date);
 
-      if (isset($j['send_counter'])) 
-        if ($j['send_counter']<34)
-          $ctr = $j['send_counter'];
-        else
-          $ctr = 34;
-      else
-        $ctr = 0; 
+      $ctr = isset($j['send_counter']) ? ($j['send_counter']+1) : 1;
     
-      $d_ext = '01'.$e[$ctr];
-      // $this->info('ctr: '.$ctr);
-
+      $d_ext = '01'.$ctr;
       $newfile = $filename.'.'.$d_ext;
 
-      if (app()->environment()=='local') {
-        $connection = ssh2_connect('boss.giligansrestaurant.com', 22);
-        ssh2_auth_password($connection, 'server-admin', 'b33rpr0m0');
-        $res = ssh2_scp_send($connection, $fullpath, $newfile, 0644);
+      // $this->info($newfile);
+
+      $this->rlcToStorage($date, $newfile);
+
+      $this->toJson($date, ['send_counter'=>$ctr]);
+
+      $auth_res = 0;
+      $error_code = 0;
+
+      if (trim($this->sysinfo->ftp_ip)=='' || empty(trim($this->sysinfo->ftp_ip))) {
+        $error_code = 500;
       } else {
-        $connection = ssh2_connect(trim($this->sysinfo->ftp_ip, 22));
-        ssh2_auth_password($connection, trim($this->sysinfo->ftp_user), trim($this->sysinfo->ftp_pw));
-        $res = ssh2_scp_send($connection, $fullpath, $newfile, 0644);
+        try {
+          $sftp = $this->rlcGetSftpServer();
+        } catch (Exception $e) {
+          // throw new Exception($e->getCode()); 
+          $error_code = $e->getCode(); 
+        }
       }
 
-      if ($res==1) {
-        $this->toJson($date, [
-          'send_counter' => ($ctr+1)
-        ]);
+      // $error_code = 500;
+      if ($error_code == 500) {
+        $this->line(' ');
+        $this->error('Cannot connect to server '.trim($this->sysinfo->ftp_ip).'. Offline mode');
+        $this->error('Sales file is not sent to RLC Server. Please contact your POS vendor.');
+        $this->rlcStorageToUnsent($date, $newfile);
+        exit;
+      } else { 
 
+        // $this->info('Login success!');
+        // $this->info($fullpath.' '.$newfile);
 
-        $ftp_dir = 'C:\RLC'.DS.'FTP'.DS.$date->format('Y');
-        if (!is_dir($ftp_dir))
-          mdir($ftp_dir);
+        $success_send = $sftp->put($newfile, $fullpath, SFTP::SOURCE_LOCAL_FILE);
 
-        if (copy($fullpath, $ftp_dir.DS.$newfile)) {
-          $this->info('OK - Copying: '.$ftp_dir.DS.$newfile);
+        if ($success_send) {
+          
+          $this->line(' ');
+          $this->alert('Sales file successfully sent to RLC Server! ');
+
+          $this->rlcStorageToSent($date, $newfile);
+
         } else {
-          $this->info('ERROR - Copying: '.$ftp_dir.DS.$newfile);
+          $this->error('Sales file is not sent to RLC Server. Please contact your POS vendor.');
+          $this->rlcStorageToUnsent($date, $newfile);
+        }
+
+      } 
+    } else {
+      $this->line(' ');
+      $this->error('Salesfile not found! ('.$fullpath.')');
+    } // end: file_exists
+  }
+
+  private function rlcUnsent(Carbon $date) {
+
+    $error_code = 0;
+
+    if (trim($this->sysinfo->ftp_ip)=='' || empty(trim($this->sysinfo->ftp_ip))) {
+      $error_code = 500;
+    } else {
+      try {
+        $sftp = $this->rlcGetSftpServer();
+      } catch (Exception $e) {
+        // throw new Exception($e->getCode()); 
+        $error_code = $e->getCode(); 
+      }
+    }
+
+    if ($error_code == 500) {
+      $this->line(' ');
+      $this->error('Cannot connect to server '.trim($this->sysinfo->ftp_ip).'. Offline mode');
+      $this->error('Sales file is not sent to RLC Server. Please contact your POS vendor.');
+      exit;
+    } else { 
+
+      $path = 'C:\RLC'.DS.'UNSENT'.DS.$date->format('Y');
+      $files = array_diff(scandir($path), array('.'));
+      array_shift($files);
+
+      if (count($files)>0) {
+
+        $this->line(' ');
+        $this->alert(count($files).' unsent sales file.');
+        
+        // $this->info(print_r($files));
+        foreach ($files as $k => $f)
+          $this->info('       '.($k+1).'. '.$f);
+
+        $res = $this->confirm('You want to send unsent sales file?');
+
+        if ($res) {
+
+          $bar = $this->output->createProgressBar(count($files));
+
+          foreach ($files as $file) {
+
+            // $this->line($path.DS.$file);
+            $success_send = $sftp->put($file, $path.DS.$file, SFTP::SOURCE_LOCAL_FILE);
+
+            if ($success_send) {
+             
+              $this->info(' '.$file.' sales file successfully sent to RLC Server! ');
+             
+              $this->rlcUnsentToSent($date, $file);
+
+            } else {
+              $this->error('Sales file is not sent to RLC Server. Please contact your POS vendor.');
+            }
+
+            // usleep(50000);
+            // $bar->advance();
+          }
+          
+          $bar->finish();
+          $this->info(' ');
+        } else {
+          $this->info('Cancelled.');
         }
       } else {
-        $this->info('Error on sending thru SFTP');
+        $this->line('No unsent files.');
+      }
+    }
+  }
+
+  private function rlcGetSftpServer() {
+
+    $msg = '';
+    $auth_res = 0;
+    $ctr = 0;
+    
+    do {
+
+      $sftp = new SFTP(trim($this->sysinfo->ftp_ip));
+      // $sftp = new SFTP('rlccloud.robinsonsland.com');
+      // $this->info('Try logging on: '. trim($this->sysinfo->ftp_ip));
+       
+      try {
+        // $auth_res = $sftp->login('accredit', 'RLC@Partners');
+        $auth_res = $sftp->login(trim($this->sysinfo->ftp_user), trim($this->sysinfo->ftp_pw));
+      } catch (Exception $e) {
+        $msg = $e->getMessage();
+      } 
+
+      // if(str_contains($msg, 'SSH'))
+        // $this->info('msg:'.$msg);
+
+      if(str_contains($msg, 'php_network_getaddresses')) {
+        throw new Exception('Could not connect to RLC Server. Check network connection', 500);
         exit;
       }
 
+      $ctr++;
+      usleep(50000);
+    } while (intval($auth_res)==0);
+
+    return $sftp;
+  }
+
+  private function rlcStorageToUnsent(Carbon $date, $filename) {
+
+    $dir = 'C:\RLC'.DS.'UNSENT'.DS.$date->format('Y');
+    $storage_dir = 'C:\RLC'.DS.'STORAGE'.DS.$date->format('Y');
+    $fullpath = $storage_dir.DS.$filename;
+
+    if (!is_dir($dir))
+      mdir($dir);
+
+    if (copy($fullpath, $dir.DS.$filename)) {
+      // $this->info('Copying: '.$dir.DS.$filename);
+    } else
+      $this->error('Error copying: '.$dir.DS.$filename);
+  }
+
+  private function rlcUnsentToSent(Carbon $date, $filename) {
+
+    $dir = 'C:\RLC'.DS.'FTP'.DS.$date->format('Y');
+    $source_dir = 'C:\RLC'.DS.'UNSENT'.DS.$date->format('Y');
+    $source_file = $source_dir.DS.$filename;
+
+    if (!is_dir($dir))
+      mdir($dir);
+
+    if (copy($source_file, $dir.DS.$filename)) {
+      if (file_exists($source_file)) 
+        unlink($source_file);
+    } else
+      $this->error('Error copying: '.$dir.DS.$filename);
+  }
+
+  private function rlcStorageToSent(Carbon $date, $filename) {
+
+    $dir = 'C:\RLC'.DS.'FTP'.DS.$date->format('Y');
+    $source_dir = 'C:\RLC'.DS.'STORAGE'.DS.$date->format('Y');
+    $source_file = $source_dir.DS.$filename;
+
+    if (!is_dir($dir))
+      mdir($dir);
+
+    if (copy($source_file, $dir.DS.$filename)) {
+      // $this->info('Copying: '.$dir.DS.$filename);
+    } else
+      $this->error('Error copying: '.$dir.DS.$filename);
+  }
+
+  private function rlcToStorage(Carbon $date, $new_filename) {
+
+    $tid = substr(trim($this->sysinfo->tenantname),4);
+    $src_path = 'C:\RLC'.DS.$date->format('Y');
+    $filename = $tid.$date->format('md');
+    $fullpath = $src_path.DS.$filename.'.011';
+
+    $storage_dir = 'C:\RLC'.DS.'STORAGE'.DS.$date->format('Y');
+
+    if (!is_dir($storage_dir))
+      mdir($storage_dir);
+
+    if (copy($fullpath, $storage_dir.DS.$new_filename)) {
+        $this->info('OK - Copying: '.$storage_dir.DS.$new_filename);
+        return true;
     } else {
-      $this->info('File not found! ('.$fullpath.')');
-    } // end: res
-
-
-
-
-
-
-    exit;
-
-    $this->info(json_encode($j));
-    // $this->info($e['0']);
-    $j = $this->getJsonData($date);
-    $this->info(json_encode($j));
-
-    $this->info($this->sysinfo->tenantname);
-
-
-    $connection = ssh2_connect('boss.giligansrestaurant.com', 22);
-    ssh2_auth_password($connection, 'server-admin', 'b33rpr0m0');
-
-    // $res = ssh2_scp_send($connection, 'C:\RLC\TEST.TXT', 'TEST.TXT', 0644);
-
-    $sftp = ssh2_sftp($connection);
-    $statinfo = ssh2_sftp_stat($sftp, 'TEST.TXT');
-
-    $this->info(json_encode($statinfo));
-
-
-
-    
+        $this->info('ERROR - Copying: '.$storage_dir.DS.$new_filename);
+        return false;
+    }
   }
 
   /*********************************************************** end: RLC ****************************************/
