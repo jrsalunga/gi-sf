@@ -4964,7 +4964,7 @@ class Eod extends Command
       $error_code = 0;
 
       if (trim($this->sysinfo->ftp_rlc)=='I') {
-        $error_code = 500;
+        $error_code = 400;
       } else if (trim($this->sysinfo->ftp_rlc)=='A') {
         try {
           $sftp = $this->rlcGetSftpServer();
@@ -4983,7 +4983,13 @@ class Eod extends Command
         $this->error('Sales file is not sent to RLC Server. Please contact your POS vendor.');
         $this->rlcStorageToUnsent($date, $newfile);
         exit;
-      } else { 
+      } else if ($error_code == 400) {
+        $this->line(' ');
+        $this->error('POS FTP connection set to (I) inactive. Offline mode');
+        $this->error('Sales file is not sent to RLC Server. Please contact your POS vendor.');
+        $this->rlcStorageToUnsent($date, $newfile);
+        exit;
+      } else {
 
         // $this->info('Login success!');
         // $this->info($fullpath.' '.$newfile);
@@ -5011,44 +5017,49 @@ class Eod extends Command
 
   private function rlcUnsent(Carbon $date) {
 
-    $error_code = 0;
+    $path = 'C:\RLC'.DS.'UNSENT'.DS.$date->format('Y');
+    $files = array_diff(scandir($path), array('.'));
+    array_shift($files);
 
-    if (trim($this->sysinfo->ftp_rlc)=='I') {
-      $error_code = 500;
-    } else if (trim($this->sysinfo->ftp_rlc)=='A') {
-      try {
-        $sftp = $this->rlcGetSftpServer();
-      } catch (Exception $e) {
-        // throw new Exception($e->getCode()); 
-        $error_code = $e->getCode(); 
-      }
-    } else {
-      $this->line('Wrong value on POS 5-3-3, FTP Connection.');
-    }
+    if (count($files)>0) {
 
-    if ($error_code == 500) {
       $this->line(' ');
-      $this->error('Cannot connect to server '.trim($this->sysinfo->ftp_ip).'. Offline mode');
-      $this->error('Sales file is not sent to RLC Server. Please contact your POS vendor.');
-      exit;
-    } else { 
+      $this->alert(count($files).' unsent sales file.');
+      
+      // $this->info(print_r($files));
+      foreach ($files as $k => $f)
+        $this->info('       '.($k+1).'. '.$f);
 
-      $path = 'C:\RLC'.DS.'UNSENT'.DS.$date->format('Y');
-      $files = array_diff(scandir($path), array('.'));
-      array_shift($files);
+      $res = $this->confirm('You want to send unsent sales file?');
 
-      if (count($files)>0) {
+      if ($res) {
 
-        $this->line(' ');
-        $this->alert(count($files).' unsent sales file.');
-        
-        // $this->info(print_r($files));
-        foreach ($files as $k => $f)
-          $this->info('       '.($k+1).'. '.$f);
+        $error_code = 0;
 
-        $res = $this->confirm('You want to send unsent sales file?');
+        if (trim($this->sysinfo->ftp_rlc)=='I') {
+          $error_code = 400;
+        } else if (trim($this->sysinfo->ftp_rlc)=='A') {
+          try {
+            $sftp = $this->rlcGetSftpServer();
+          } catch (Exception $e) {
+            // throw new Exception($e->getCode()); 
+            $error_code = $e->getCode(); 
+          }
+        } else {
+          $this->line('Wrong value on POS 5-3-3, FTP Connection.');
+        }
 
-        if ($res) {
+        if ($error_code == 500) {
+          $this->line(' ');
+          $this->error('Cannot connect to server '.trim($this->sysinfo->ftp_ip).'. Offline mode');
+          $this->error('Sales file is not sent to RLC Server. Please contact your POS vendor.');
+          exit;
+       } else if ($error_code == 400) {
+          $this->line(' ');
+          $this->error('POS FTP connection set to (I) inactive. Offline mode');
+          $this->error('Sales file is not sent to RLC Server. Please contact your POS vendor.');
+          exit;
+        } else {
 
           $bar = $this->output->createProgressBar(count($files));
 
@@ -5069,16 +5080,16 @@ class Eod extends Command
 
             // usleep(50000);
             // $bar->advance();
-          }
-          
+            
+          }  
           $bar->finish();
           $this->info(' ');
-        } else {
-          $this->info('Cancelled.');
         }
       } else {
-        $this->line('No unsent files.');
+        $this->info('Cancelled.');
       }
+    } else {
+      $this->line('No unsent files.');
     }
   }
 
