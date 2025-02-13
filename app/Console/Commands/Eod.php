@@ -4963,9 +4963,9 @@ class Eod extends Command
       $auth_res = 0;
       $error_code = 0;
 
-      if (trim($this->sysinfo->ftp_rlc)=='I'))) {
+      if (trim($this->sysinfo->ftp_rlc)=='I') {
         $error_code = 500;
-      } else if (trim($this->sysinfo->ftp_rlc)=='A'))) {
+      } else if (trim($this->sysinfo->ftp_rlc)=='A') {
         try {
           $sftp = $this->rlcGetSftpServer();
         } catch (Exception $e) {
@@ -5013,9 +5013,9 @@ class Eod extends Command
 
     $error_code = 0;
 
-    if (trim($this->sysinfo->ftp_rlc)=='I'))) {
+    if (trim($this->sysinfo->ftp_rlc)=='I') {
       $error_code = 500;
-    } else if (trim($this->sysinfo->ftp_rlc)=='A'))) {
+    } else if (trim($this->sysinfo->ftp_rlc)=='A') {
       try {
         $sftp = $this->rlcGetSftpServer();
       } catch (Exception $e) {
