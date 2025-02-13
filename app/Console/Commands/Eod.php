@@ -4963,15 +4963,17 @@ class Eod extends Command
       $auth_res = 0;
       $error_code = 0;
 
-      if (trim($this->sysinfo->ftp_ip)=='' || empty(trim($this->sysinfo->ftp_ip))) {
+      if (trim($this->sysinfo->ftp_rlc)=='I'))) {
         $error_code = 500;
-      } else {
+      } else if (trim($this->sysinfo->ftp_rlc)=='A'))) {
         try {
           $sftp = $this->rlcGetSftpServer();
         } catch (Exception $e) {
           // throw new Exception($e->getCode()); 
           $error_code = $e->getCode(); 
         }
+      } else {
+        $this->line('Wrong value on POS 5-3-3, FTP Connection.');
       }
 
       // $error_code = 500;
@@ -5011,15 +5013,17 @@ class Eod extends Command
 
     $error_code = 0;
 
-    if (trim($this->sysinfo->ftp_ip)=='' || empty(trim($this->sysinfo->ftp_ip))) {
+    if (trim($this->sysinfo->ftp_rlc)=='I'))) {
       $error_code = 500;
-    } else {
+    } else if (trim($this->sysinfo->ftp_rlc)=='A'))) {
       try {
         $sftp = $this->rlcGetSftpServer();
       } catch (Exception $e) {
         // throw new Exception($e->getCode()); 
         $error_code = $e->getCode(); 
       }
+    } else {
+      $this->line('Wrong value on POS 5-3-3, FTP Connection.');
     }
 
     if ($error_code == 500) {
