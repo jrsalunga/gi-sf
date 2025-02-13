@@ -5098,6 +5098,7 @@ class Eod extends Command
     $msg = '';
     $auth_res = 0;
     $ctr = 0;
+    $try_connect = 10; 
     
     do {
 
@@ -5122,10 +5123,10 @@ class Eod extends Command
 
       $ctr++;
       usleep(50000);
-    } while (intval($auth_res)==0 && $ctr=<10);
+    } while (intval($auth_res)==0 && $ctr<$try_connect);
 
-    if ($ctr=>10) {
-      throw new Exception('Could not connect to RLC Server. Check network connection', 500);
+    if ($ctr>=$try_connect) {
+      throw new Exception('Could not connect to RLC Server. Connection timeout', 500);
       exit;
     }
 
