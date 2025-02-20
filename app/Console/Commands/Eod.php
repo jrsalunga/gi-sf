@@ -4945,6 +4945,11 @@ class Eod extends Command
     $filename = $tid.$date->format('md');
     $fullpath = $src_path.DS.$filename.'.011';
 
+    $prev_tid = '1388';
+    if (!file_exists($fullpath) || file_exists($src_path.DS.$prev_tid.'.011')) 
+      $fullpath = $src_path.DS.$prev_tid.'.011';
+
+
     if (file_exists($fullpath)) {
 
       $j = $this->getJsonData($date);
@@ -5189,12 +5194,6 @@ class Eod extends Command
     $src_path = 'C:\RLC'.DS.$date->format('Y');
     $filename = $tid.$date->format('md');
     $fullpath = $src_path.DS.$filename.'.011';
-
-
-    $prev_tid = '1388';
-    if (!file_exists($fullpath) || file_exists($src_path.DS.$prev_tid.'.011')) 
-      $fullpath = $src_path.DS.$prev_tid.'.011';
-    
 
     $storage_dir = 'C:\RLC'.DS.'STORAGE'.DS.$date->format('Y');
 
