@@ -5120,6 +5120,11 @@ class Eod extends Command
         exit;
       }
 
+      if(str_contains($msg, 'timeout') || str_contains($msg, 'timed out')) {
+        throw new Exception('Could not connect to RLC Server. Check network connection', 500);
+        exit;
+      }
+
       $ctr++;
       usleep(50000);
     } while (intval($auth_res)==0 && $ctr<$try_connect);
