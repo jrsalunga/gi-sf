@@ -11,7 +11,7 @@ use phpseclib3\Net\SFTP;
 class Eod extends Command
 {
   // php artisan eod 2021-02-26 --lessorcode=yic
-  protected $signature = 'eod {date : YYYY-MM-DD} {--lessorcode= : File Extension} {--ext=csv : File Extension} {--mode=eod : Run Mode} {--dateTo= : Date To}  {--hour= : Hour}';
+  protected $signature = 'eod {date : YYYY-MM-DD} {--lessorcode= : File Extension} {--ext=csv : File Extension} {--mode=eod : Run Mode} {--dateTo= : Date To}  {--hour= : Hour} {--payment=false : process on Payment}';
   protected $description = 'Command description';
   private $excel;
   private $sysinfo;
@@ -253,7 +253,11 @@ class Eod extends Command
         return $this->out = $dir;
         break;
       case 'ALI':
-        $dir = 'D:'.DS.'AYALA'.DS.$this->date->format('Y').DS.$this->date->format('m').DS.$this->date->format('d');
+        if (app()->environment()=='local')
+          $dir = 'D:'.DS.'AYALA'.DS.$this->date->format('Y').DS.$this->date->format('m').DS.$this->date->format('d');
+        else
+          $dir = 'D:'.DS.'AYALA'.DS.$this->date->format('Y');
+        
         if (!is_dir($dir))
           mdir($dir);
         return $this->out = $dir;
@@ -4006,7 +4010,44 @@ class Eod extends Command
   /*********************************************************** ALI ****************************************/
   public function ALI(Carbon $date, $ext) {
 
-    $this->aliCharges($date);
+    $this->info('mode:'.$this->option('mode').' - payment:'.$this->option('payment'));
+
+    if($this->option('payment')==='true')
+      $this->aliProcessPostedPayment($date);
+    else
+      $this->aliCharges($date);
+  }
+
+  private function aliProcessPostedPayment(Carbon $date) {
+    $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
+    if (file_exists($dbf_file)) {
+      $db = dbase_open($dbf_file, 0);
+      $record_numbers = dbase_numrecords($db);
+      // $row = dbase_get_record_with_names($db, $record_numbers);  /// $record_numbers - x, x = number
+      $trans = [];
+      
+      for ($i=1; $i<=$record_numbers; $i++) {
+        $row = dbase_get_record_with_names($db, $i);
+
+        try {
+          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
+        } catch(Exception $e) {
+          
+        }
+        // $this->info('vfpdate:'.$vfpdate->format('Y-m-d').' = '.$date->format('Y-m-d'));
+
+        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
+          $r = $this->associateAttributes($row);
+          $trans = $this->aliGetTrans($date, $r);
+          $this->aliGenerateCSVPosted($date, $trans, $r['cslipno']);
+        } else {
+          // $this->info('no payment posted');
+        }
+      }
+      dbase_close($db);
+    } else {
+      throw new Exception("Cannot locate CHARGES.DBF"); 
+    }
   }
 
   private function aliGetItem(Carbon $date, $cslipno, $table_no) {
@@ -4056,11 +4097,28 @@ class Eod extends Command
 
   private function aliGetTrans(Carbon $date, array $row) {
 
-    $vat = $vtble = $ves = $vea = $qty_sld = 0;
+    $vat = $vtble = $ves = $vea = $qty_sld = $pwd = $sr = $tot_disc = 0;
+    
     if ($row['sr_disc']>0) {
       $ves = $row['tot_chrg'];
       $vea = $row['vat_xmpt'];
       $tcust = $row['sr_body'];
+
+      if (app()->environment()=='local')  {
+        if ($row['sr_body']==1) { // if 1 lang senior
+          if (str_contains($row['card_name'], 'PWD')) {
+            $pwd = $row['sr_disc']; // pwd disc amt
+          } else {
+            $sr = $row['sr_disc']; // snr disc amt
+          }
+        } else {
+          $sr = $row['sr_disc']; // snr disc amt
+        }
+      } else {
+        $sr = $row['sr_disc']; // snr disc amt
+      }
+
+
 
     } else {
       $vat = $row['vat'];
@@ -4069,6 +4127,7 @@ class Eod extends Command
     }
 
     $oth_disc = $row['dis_gpc']+$row['dis_vip']+$row['dis_udisc']+$row['dis_prom'];
+
 
     $master = $visa = $amex = $jcb = $diners = $charge = $cash = $other_pay = 0; 
     $gcash = $maya = $alipay = $wechat = $grab = $panda = $epay = 0; 
@@ -4156,9 +4215,11 @@ class Eod extends Command
     $items = $this->aliGetItem($date, $row['cslipno'], $row['tblno']);
     foreach($items as $k => $v)
       $qty_sld += $v['QTY'];
+
+    $tot_disc = $row['promo_amt'] + $row['sr_disc'] + $row['oth_disc'] + $row['u_disc'];
     
     $datas = [
-      'CDATE' => $row['vfpdate']->format('Y-m-d'),
+      'CDATE' => $row['vfpdate']->format('H')<8 ? $row['vfpdate']->copy()->addDay()->format('Y-m-d') : $row['vfpdate']->format('Y-m-d'),
       'TRN_TIME' => $row['vfpdate']->format('H:i'),
       'TER_NO' => str_pad($this->sysinfo->pos_no, 3, 0, STR_PAD_LEFT),
       'TRANSACTION_NO' => $row['cslipno'],
@@ -4169,8 +4230,8 @@ class Eod extends Command
       'VATEXEMPT_SLS' => number_format($ves, 2,'.',''),
       'VATEXEMPT_AMNT' => number_format($vea, 2,'.',''),
       'LOCAL_TAX' => number_format(0, 2,'.',''),
-      'PWD_DISC' => number_format($row['dis_pwd'], 2,'.',''),
-      'SNRCIT_DISC' => number_format($row['sr_disc'], 2,'.',''),
+      'PWD_DISC' => number_format($pwd, 2,'.',''),
+      'SNRCIT_DISC' => number_format($sr, 2,'.',''),
       'EMPLO_DISC' => number_format($row['dis_emp'], 2,'.',''),
       'AYALA_DISC' => number_format(0, 2,'.',''),
       'STORE_DISC' => number_format(0, 2,'.',''),
@@ -4226,6 +4287,43 @@ class Eod extends Command
     return $datas;
   }
 
+  private function aliGenerateCSVPosted(Carbon $date, array $data, $cslipno) {
+    
+    $filename = '7900'.trim($this->sysinfo->contract).$date->format('mdy').str_pad($this->sysinfo->pos_no, 3, 0, STR_PAD_LEFT).'_'.$cslipno.'.csv';
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
+    if (!is_dir($dir))
+      mdir($dir);
+    $file = $dir.DS.$filename;
+    $fp = fopen($file, 'w');
+
+    $head = [
+      'CCCODE' => '7900'.trim($this->sysinfo->contract),
+      'MERCHANT_NAME' => trim($this->sysinfo->tenantname),
+      'TRN_DATE' => $date->format('Y-m-d'),
+      'NO_TRN' => 1,
+    ];
+
+
+    foreach ($head as $key => $value) {
+      $ln = $key.','.$value; 
+      fwrite($fp, $ln.PHP_EOL);
+    }
+
+    foreach ($data as $k => $v) 
+    if ($k==='ITEMS') {
+      foreach ($v as $m => $n)
+        foreach ($n as $o => $p) {
+          $ln = $o.','.$p; 
+          fwrite($fp, $ln.PHP_EOL);
+        }
+    } else {
+      $ln = $k.','.$v; 
+      fwrite($fp, $ln.PHP_EOL);
+    }
+    
+
+    $this->verifyCopyFile($file, $filename);
+  }
 
   private  function aliGenHourlyCsv(Carbon $date, array $data, $hr, $last_cslipno, $head) {
 
@@ -4260,8 +4358,89 @@ class Eod extends Command
     $this->verifyCopyFile($file, $filename);
   }
 
+  private function getJsonArray(Carbon $date) {
+    $this_date = $date; 
+    $filename = $this_date->format('Ymd');
+    $dir = $this->getStoragePath().DS.$this_date->format('Y').DS.$this_date->format('m');
+    $file = $dir.DS.$filename.'.json';
+    $a = [];
+    // alog('Getting previous data - OK');
+
+    if (file_exists($file)) {
+      alog('Reading - '.$file);
+      foreach (json_decode(file_get_contents($file), true) as $key => $value)
+        $a[$key] = $value;
+    } 
+    return $a;
+  }
 
   private function aliGenEodCsv(Carbon $date, array $data) {
+
+    $pos_gross_sls = $data[7]; // gross sales
+    // or $gross_sls = $vat_amnt + $vatable_sls + $vatexempt_sls + $vatexempt_amnt + $tot_disc; 
+    $gross_sls = $pos_gross_sls;
+    
+    $sales = $data[111]; // $data[111] ==  $vatable_sls + $vatexempt_sls + $vat_amnt
+    
+    $vat_amnt = $data[8];
+    $tot_disc = $data[18];
+    $sc_disc = $data[22];
+    $vatable_sls = $data[9]; 
+    $vatexempt_sls = $data[11];  
+    $vatexempt_amnt = $data[12];
+
+    $netsales = $vatable_sls + $vatexempt_sls;     
+    $dailysales = $gross_sls - ($vatexempt_amnt + $tot_disc); // $data[111]
+    $ayala_gross = $gross_sls - $tot_disc;
+
+    $txt_gross_sls = $vat_amnt + $vatable_sls + $vatexempt_sls + $tot_disc; // or  $pos_gross_sls - $vatexempt_amnt
+    
+
+    $e_txt_gross_sales = $gross_sls - $vatexempt_amnt;
+    $e_txt_sales = $e_txt_gross_sales - $tot_disc - $vat_amnt;
+    $e_txt_notaxsales = $vatexempt_sls;
+    $e_txt_add_grntot = $sales;
+
+    $csv_add_grntot = $vatable_sls + $vatexempt_sls + $vat_amnt;
+    $csv_gross_sls = $vatable_sls + $vatexempt_sls + $vat_amnt + $vatexempt_amnt + $tot_disc;
+
+
+    $trans_cnt = $data[108];
+    $cust_cnt = $data[107];
+    $cash_sale = $data[35];
+    $charge_sale = $data[36];
+
+    $prev = $this->getJsonArray($date->copy()->subDay());
+
+    // print_r($prev);
+
+    $this->toJson($date, [
+      'zcounter' => isset($prev['zcounter']) ? ($prev['zcounter']+1) : 1 ,
+      'pos_gross_sls'=> number_format($pos_gross_sls, 2, '.', ''),
+      'gross_sls'=> number_format($gross_sls, 2, '.', ''),
+      'sales' => number_format($sales, 2, '.', ''),
+      'dailysales' => number_format($dailysales, 2, '.', ''),
+      'netsales'=> number_format($netsales, 2, '.', ''),
+      'vat_amnt' => number_format($vat_amnt, 2, '.', ''),
+      'vatable_sls' => number_format($vatable_sls, 2, '.', ''),
+      'vatexempt_sls' => number_format($vatexempt_sls, 2, '.', ''),
+      'vatexempt_amnt' => number_format($vatexempt_amnt, 2, '.', ''),
+      'tot_disc' => number_format($tot_disc, 2, '.', ''),
+      'old_grntot' => number_format((isset($prev['new_grntot']) ? $prev['new_grntot'] : 0), 2, '.', ''),
+      'new_grntot' => number_format((isset($prev['new_grntot']) ? $prev['new_grntot'] : 0) + $sales, 2, '.', ''), // vat + vatable + vat xmpt
+      'ayala_gross' => number_format($ayala_gross, 2, '.', ''),
+      'txt_gross_sls'=> number_format($txt_gross_sls, 2, '.', ''),
+      'cust_cnt'=> number_format($cust_cnt, 0, '.', ''),
+      'trans_cnt'=> number_format($trans_cnt, 0, '.', ''),
+      'cash_sale' => number_format($cash_sale, 2, '.', ''),
+      'charge_sale'=> number_format($charge_sale, 2, '.', ''),
+    ]);
+
+    $now = $this->getJsonArray($date);
+    // print_r($now);
+
+
+
     $datas = [
       'CCCODE' => $data[1],
       'MERCHANT_NAME' => $data[2],
@@ -4269,25 +4448,25 @@ class Eod extends Command
       'TRN_DATE' => $data[4],
       'STRANS' => $data[5],
       'ETRANS' => $data[6],
-      'GROSS_SLS' => number_format($data[7], 2, '.', ''),
-      'VAT_AMNT' => number_format($data[8], 2, '.', ''),
-      'VATABLE_SLS' => number_format($data[9], 2, '.', ''),
+      'GROSS_SLS' => number_format($csv_gross_sls, 2, '.', ''),
+      'VAT_AMNT' => number_format($vat_amnt, 2, '.', ''),
+      'VATABLE_SLS' => number_format($vatable_sls, 2, '.', ''),
       'NONVAT_SLS' => number_format(0, 2, '.', ''),
-      'VATEXEMPT_SLS' => number_format($data[11], 2, '.', ''),
-      'VATEXEMPT_AMNT' => number_format($data[12], 2, '.', ''),
-      'OLD_GRNTOT' => number_format($data[13], 2, '.', ''),
-      'NEW_GRNTOT' => number_format(($data[14]+$data[111]), 2, '.', ''),
+      'VATEXEMPT_SLS' => number_format($vatexempt_sls, 2, '.', ''),
+      'VATEXEMPT_AMNT' => number_format($vatexempt_amnt, 2, '.', ''),
+      'OLD_GRNTOT' => number_format($now['old_grntot'], 2, '.', ''),
+      'NEW_GRNTOT' => number_format($now['new_grntot'], 2, '.', ''),
       'LOCAL_TAX' => number_format(0, 2, '.', ''),
       'VOID_AMNT' => number_format(0, 2, '.', ''),
       'NO_VOID' => number_format(0, 0, '.', ''),
-      'DISCOUNTS' => number_format($data[18], 2, '.', ''),
+      'DISCOUNTS' => number_format($tot_disc, 2, '.', ''),
       'NO_DISC' => number_format($data[19], 0, '.', ''),
       'REFUND_AMT' => number_format(0, 2, '.', ''),
       'NO_REFUND' => number_format(0, 0, '.', ''),
       'SNRCIT_DISC' => number_format($data[22], 2, '.', ''),
       'NO_SNRCIT' => number_format($data[23], 0, '.', ''),
-      'PWD_DISC' => number_format(0, 2, '.', ''),
-      'NO_PWD' => number_format(0, 0, '.', ''),
+      'PWD_DISC' => number_format($data[24], 2, '.', ''),
+      'NO_PWD' => number_format($data[25], 0, '.', ''),
       'EMPLO_DISC' => number_format($data[26], 2, '.', ''),
       'NO_EMPLO' => number_format($data[27], 0, '.', ''),
       'AYALA_DISC' => number_format(0, 2, '.', ''),
@@ -4371,8 +4550,8 @@ class Eod extends Command
       'NO_NOSALE' => number_format(0, 0, '.', ''),
       'NO_CUST' => number_format($data[107], 0, '.', ''),
       'NO_TRN' => number_format($data[108], 0, '.', ''),
-      'PREV_EODCTR' => number_format($data[109], 0, '.', ''),
-      'EODCTR' => number_format($data[110], 0, '.', ''),
+      'PREV_EODCTR' => number_format($now['zcounter']-1, 0, '.', ''),
+      'EODCTR' => number_format($now['zcounter'], 0, '.', ''),
     ];
 
 
@@ -4389,30 +4568,184 @@ class Eod extends Command
     }
 
     $this->verifyCopyFile($file, $filename);
+
+
+
+    /********* generate text file **********/
+
+    $datas = [];
+    $ext = 'TXT';
+    $filename2 = trim($this->sysinfo->contract).$date->format('md');
+    $file = $dir.DS.$filename.'.'.$ext;
+    $fp = fopen($file, 'w');
+
+    $datas[0] = ['TRANDATE','OLDGT','NEWGT','DLYSALE','TOTDISC','TOTREF','TOTCAN','VAT','TENTNAME','BEGINV','ENDINV','BEGOR','ENDOR','TRANCNT','LOCALTX','SERVCHARGE','NOTAXSALE','RAWGROSS','DLYLOCTAX','OTHERS','TERMNUM'];
+    $datas[1] = [
+      $date->format('m/d/Y'), 
+      number_format($now['old_grntot'], 2, '.', ''),
+      number_format($now['new_grntot'], 2, '.', ''),
+      number_format($netsales, 2, '.', ''),
+      number_format($tot_disc, 2, '.', ''),
+      number_format(0, 2, '.', ''),
+      number_format(0, 2, '.', ''),
+      number_format($vat_amnt, 2, '.', ''),
+      trim($this->sysinfo->tenantname),
+      $data[5],
+      $data[6],
+      $data[5],
+      $data[6],
+      $data[108],
+      number_format(0, 2, '.', ''),
+      number_format(0, 2, '.', ''),
+      number_format($vatexempt_sls, 2, '.', ''),
+      number_format($txt_gross_sls, 2, '.', ''),
+      number_format($netsales, 2, '.', ''),
+      0,
+      1,
+    ];
+
+
+    $this->toTXT($datas, $date, $filename2, $ext, $dir, false);
+
+    $file = $dir.DS.$filename2.'.'.$ext;
+
+    $newfile = $filename2.'.'.$ext;
+
+    $this->verifyCopyFile($file, $newfile);
+
+
+
+
+
+    $lines = $this->aliGenerateZread($date, $now);
+
+    $zfilename = trim($this->sysinfo->contract).$date->format('md').'Z';
+    $zfile = $dir.DS.$zfilename.'.'.$ext;
+
+    $new = file_exists($zfile) ? false : true;
+    if($new){
+      $handle = fopen($zfile, 'w+');
+      chmod($zfile, 0775);
+    } else
+      $handle = fopen($zfile, 'w+');
+
+    if (!is_null($lines)) {
+      foreach ($lines as $key => $content) {
+        fwrite($handle, $content.PHP_EOL);
+      }
+    }
+    
+    fclose($handle);
+
+    $this->verifyCopyFile($zfile, $zfilename.'.'.$ext);
   }
 
+  public function aliGenerateZread(Carbon $date, array $data) {
+
+    $heads = $this->aliGetHeader(trim($this->sysinfo->gi_brcode));
+
+    $lines = [];
+    array_push($lines, bpad(' ', 40));
+    array_push($lines, bpad(' ', 40));
+    array_push($lines, bpad(' ', 40));
+
+    array_push($lines, bpad(' ', 40));
+    foreach ($heads as $key => $h)
+      array_push($lines, $h);
+
+    array_push($lines, bpad(' ', 40));
+
+    array_push($lines, bpad("----------------------------------------", 40));
+    array_push($lines, bpad("CONSOLIDATED REPORT Z-READ", 40));
+    array_push($lines, bpad("----------------------------------------", 40));
+    array_push($lines, rpad('Daily Sales', 23).lpad(nf($data['sales'], 2, true), 17));
+    array_push($lines, rpad('Total Discount', 23).lpad(nf($data['tot_disc'], 2, true), 17));
+    array_push($lines, rpad('Total Refund', 23).lpad('0.00', 17));
+    array_push($lines, rpad('Total Cancelled/Void', 23).lpad('0.00', 17));
+    array_push($lines, rpad('Total Service Charge', 23).lpad('0.00', 17));
+    array_push($lines, rpad('Total Vatable Sales', 23).lpad(nf($data['vatable_sls'], 2, true), 17));
+    array_push($lines, rpad('Total VAT Amount', 23).lpad(nf($data['vat_amnt'], 2, true), 17));
+    array_push($lines, rpad('Total Non Taxable', 23).lpad(nf($data['vatexempt_sls'], 2, true), 17));
+    array_push($lines, rpad('Total Exempt Amount', 23).lpad(nf($data['vatexempt_amnt'], 2, true), 17));
+    array_push($lines, rpad('Net Sales', 23).lpad(nf($data['netsales'], 2, true), 17));
+    array_push($lines, rpad('Raw Gross', 23).lpad(nf($data['gross_sls'], 2, true), 17));
+    array_push($lines, rpad('TXT Raw Gross', 23).lpad(nf($data['txt_gross_sls'], 2, true), 17));
+    array_push($lines, rpad('Ayala Gross', 23).lpad(nf($data['ayala_gross'], 2, true), 17));
+    array_push($lines, rpad('Old Grand Total', 23).lpad(nf($data['old_grntot'], 2, true), 17));
+    array_push($lines, rpad('New Grand Total', 23).lpad(nf($data['new_grntot'], 2, true), 17));
+    array_push($lines, rpad('Transaction Count', 23).lpad(nf($data['trans_cnt'], 0), 17));
+    array_push($lines, rpad('Customer Count', 23).lpad(nf($data['cust_cnt'], 0), 17));
+    array_push($lines, rpad('Cash Sales', 23).lpad(nf($data['cash_sale'], 2, true), 17));
+    array_push($lines, rpad('Charge Sales', 23).lpad(nf($data['charge_sale'], 2, true), 17));
+    array_push($lines, bpad("----------------------------------------", 40));
+    array_push($lines, bpad('DATE: '.$date->format('m/d/Y'), 40));
+    array_push($lines, bpad(' ', 40));
+    array_push($lines, bpad("*** END OF REPORT ***", 40));
+
+    array_push($lines, bpad(' ', 40));
+    array_push($lines, bpad(' ', 40));
+
+    // foreach ($lines as $key => $h)
+    //   $this->info($h);
+
+    return $lines;
+  }
+
+  public function aliGetHeader($brcode) {
+
+    $lines = [];
+
+    if ($brcode=='MAR') {
+      array_push($lines, bpad("ALQUIROS FOOD CORPORATION", 40));
+      array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));
+      array_push($lines, bpad("Market! Market!", 40));
+      array_push($lines, bpad("FIESTA MARKET MARKET FORT BONIFACIO", 40));
+      array_push($lines, bpad("TAGUIG CITY 1630", 40));
+      array_push($lines, bpad("#205-257-440-004 VAT", 40));
+      array_push($lines, bpad("S/N 147P11S", 40));
+      array_push($lines, bpad("MIN# 070073156", 40));
+      array_push($lines, bpad("PTU# 1107-044-25319-004", 40));
+      array_push($lines, bpad("BIR Accredit # 040-205257440-000305", 40));
+    }
+
+    if ($brcode=='AST') {
+      array_push($lines, bpad("GILIGANS HOLDINGS CORPORATION", 40));
+      array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));
+      array_push($lines, bpad("AYALA MALLS SERIN", 40));
+      array_push($lines, bpad("GEN. EMILIO AGUINALDO HWY, SILANG,", 40));
+      array_push($lines, bpad("JCT. NORTH, TAGAYTAY CITY, CAVITE", 40));
+      array_push($lines, bpad("#010-264-107-026 VAT", 40));
+      array_push($lines, bpad("S/N JPH830NHN9", 40));
+      array_push($lines, bpad("MIN# 070073156", 40));
+      array_push($lines, bpad("PTU# 1107-044-25319-004", 40));
+      array_push($lines, bpad("BIR Accredit # 040-205257440-000305", 40));
+    }
+
+    return $lines;
+  }
 
   private function aliCharges(Carbon $date) {
     $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
     if (file_exists($dbf_file)) {
       $db = dbase_open($dbf_file, 0);
-      
       $header = dbase_get_header_info($db);
       $record_numbers = dbase_numrecords($db);
       $update = 0;
       $flag = false;
       $now = Carbon::now();
       $data = [];
+      $trans = [];
+      $hrly_data = [];
 
       $head = [
-        'CCCODE' => trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract),
+        'CCCODE' => '7900'.trim($this->sysinfo->contract),
         'MERCHANT_NAME' => trim($this->sysinfo->tenantname),
         'TRN_DATE' => $date->format('Y-m-d'),
       ];
       
-      $data['EOD'][1] = trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract);
-      $data['EOD'][2] = trim($this->sysinfo->tenantname);
-      $data['EOD'][3] = (trim($this->sysinfo->pos_no)+0);
+      $data['EOD'][1] = $head['CCCODE'];
+      $data['EOD'][2] = $head['MERCHANT_NAME'];
+      $data['EOD'][3] = '00'.(trim($this->sysinfo->pos_no)+0);
       $data['EOD'][4] = $date->format('Y-m-d');
       $data['EOD'][6] = $data['EOD'][5] = NULL;
 
@@ -4440,273 +4773,20 @@ class Eod extends Command
         if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
 
           $dt = Carbon::parse($vfpdate->format('Y-m-d').' '.trim($row['ORDTIME']));
-            // $this->info($dt->format('H').' '.($now->format('H')-1).' '.$now->format('H'));
-            $r = $this->associateAttributes($row);
-            
-            if ($tmp_hr == $r['vfpdate']->format('H')) {
-              // $this->info($update.' '.$r['vfpdate']->format('Y-m-d H:i:s').' '.$r['cslipno']);
-              $data[$tmp_hr][$update] = $this->aliGetTrans($date, $r); //****************************************************************************/
-
-
-              $last_cslipno = $r['cslipno'];
-            } else {
-              if (!is_null($tmp_hr)) {
-                
-                // generate hourly CSV
-                $this->aliGenHourlyCsv($date, $data, $tmp_hr, $last_cslipno, $head); //****************************************************************************/
-                
-                $tmp_hr = $r['vfpdate']->format('H');
-                $data[$tmp_hr] = [];        
-
-              } else {
-
-                $tmp_hr = $r['vfpdate']->format('H');
-                // $this->info('this is 1st run'.' '.$tmp_hr);
-              }
-              
-              // $this->info($update.' '.$r['vfpdate']->format('Y-m-d H:i:s').' '.$r['cslipno']);
-              $data[$tmp_hr][$update] = $this->aliGetTrans($date, $r); //****************************************************************************/
-
-              
-              if (is_null($last_cslipno))
-                $last_cslipno = $r['cslipno'];
-            }
-
-
-
-            if (is_null($data['EOD'][5]))
-              $data['EOD'][5] = $r['cslipno'];
-            $data['EOD'][6] = $r['cslipno'];
-            
-            $data['EOD'][7] += $r['chrg_grs'];
-
-
-            if ($r['sr_disc']>0) {
-              $data['EOD'][11] += $r['tot_chrg']; // vat exmpt sales
-              $data['EOD'][12] += $r['vat_xmpt']; // vat exmpt samount
-              
-              $data['EOD'][22] += $r['sr_disc']; // senior disc amt
-              // $data['EOD'][23] += $r['sr_body']; // senior pax
-              $data['EOD'][23]++; // senior disc trx
-              $data['EOD'][69]++; // # of vat xmpt trans
-              
-              $data['EOD'][107] += $r['sr_body']; // total customer
-            } else {
-
-              $data['EOD'][8] += $r['vat']; // vat amount
-              $data['EOD'][9] += ($r['tot_chrg']-$r['vat']); // vatable amount
-
-
-
-              // compute emp disc
-              if ($r['dis_emp']>0) {
-                $data['EOD'][26] +=$r['dis_emp']; // total disc amt
-                $data['EOD'][27]++; // total disc trans
-              }
-              // compute other disc
-              if ($r['dis_gpc']>0 || $r['dis_vip']>0 || $r['dis_pwd']>0 || $r['dis_udisc']>0 || $r['dis_prom']>0) {
-                $data['EOD'][31] +=($r['dis_gpc']+$r['dis_vip']+$r['dis_pwd']+$r['dis_udisc']+$r['dis_prom']); // total disc amt
-                $data['EOD'][32]++; // total disc trans
-              }
-              $data['EOD'][107] += ($r['sr_tcust']-$r['sr_body']); // total customer
-            }
-
-            if ($r['sr_disc']>0 || $r['oth_disc']>0 || $r['u_disc']>0 || $r['promo_amt']>0) {
-              $data['EOD'][18] +=$r['disc_amt']; // total disc amt
-              $data['EOD'][19]++; // total disc trans
-            }
-
-
-            // CASH or CHARGE sales
-            if ($r['chrg_type']=='CASH') {
-              $data['EOD'][35] += $r['tot_chrg']; //total cash sales
-              $data['EOD'][72]++; // total cash trans
-            } else 
-
-            if (in_array($r['chrg_type'], ['CHARGE', 'MAYA', 'BDO', 'BANKARD'])) {
-
-              switch (trim($r['card_type'])) {
-                case 'MASTER':
-                  $data['EOD'][36] += $r['tot_chrg'];
-                  $data['EOD'][42] += $r['tot_chrg'];
-                  $data['EOD'][73]++;
-                  $data['EOD'][79]++;
-                  break;
-                case 'VISA':
-                  $data['EOD'][36] += $r['tot_chrg'];
-                  $data['EOD'][43] += $r['tot_chrg'];
-                  $data['EOD'][73]++;
-                  $data['EOD'][80]++;
-                  break;
-                case 'AMEX':
-                  $data['EOD'][36] += $r['tot_chrg'];
-                  $data['EOD'][44] += $r['tot_chrg'];
-                  $data['EOD'][73]++;
-                  $data['EOD'][81]++;
-                  break;
-                case 'DINERS':
-                  $data['EOD'][36] += $r['tot_chrg'];
-                  $data['EOD'][45] += $r['tot_chrg'];
-                  $data['EOD'][73]++;
-                  $data['EOD'][82]++;
-                  break;
-                case 'JCB':
-                  $data['EOD'][36] += $r['tot_chrg'];
-                  $data['EOD'][46] += $r['tot_chrg'];
-                  $data['EOD'][73]++;
-                  $data['EOD'][83]++;
-                  break;
-                case 'GCASH':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][47] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][84]++;
-                  break;
-                case 'MAYA':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][48] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][85]++;
-                  break;
-                case 'PAYMAYA':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][48] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][85]++;
-                  break;
-                case 'ALIPAY':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][49] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][86]++;
-                  break;
-                case 'ALI':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][49] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][86]++;
-                  break;               
-                case 'WECHATPAY':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][50] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][87]++;
-                  break;
-                case 'WECHAT':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][50] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][87]++;
-                  break;
-                default:
-                  $data['EOD'][39] += $r['tot_chrg'];
-                  $data['EOD'][76]++;
-                  break;
-              }
-            } else
-
-            if (in_array($r['chrg_type'], ['GRAB', 'PANDA'])) {
-              $data['EOD'][39] += $r['tot_chrg'];
-              $data['EOD'][76]++;
-              if ($r['chrg_type']=='GRAB') {
-                $data['EOD'][51] += $r['tot_chrg'];
-                $data['EOD'][88]++;
-              }
-              if ($r['chrg_type']=='PANDA') {
-                $data['EOD'][52] += $r['tot_chrg'];
-                $data['EOD'][89]++;
-              }
-            } else { // ZAP
-              $data['EOD'][39] += $r['tot_chrg'];
-              $data['EOD'][76]++;
-            }
-
-        $update++;  
-        $data['EOD'][108]++;
-        $data['EOD'][111] += $r['tot_chrg']; // NETSALES
-        }
-
-        $this->aliGenHourlyCsv($date, $data, $tmp_hr, $r['cslipno'], $head); /****************************************************************************/
-        if (!$flag && $vfpdate->gt($date)) {
-          // $this->info('last run.........');
-          // generate last hourly CSV
-          $this->aliGenHourlyCsv($date, $data, $tmp_hr, $r['cslipno'], $head); /****************************************************************************/
-          $flag = true;
-        }
-      } // end:for 
-
-      $this->aliGenEodCsv($date, $data['EOD']);
-      // print_r($data['EOD']);
-      dbase_close($db);
-      return $ds;
-    } else {
-      throw new Exception("Cannot locate CHARGES.DBF"); 
-    }
-  }
-
-  private function aliCharges_v1(Carbon $date) {
-    $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
-    if (file_exists($dbf_file)) {
-      $db = dbase_open($dbf_file, 0);
-      
-      $header = dbase_get_header_info($db);
-      $record_numbers = dbase_numrecords($db);
-      $update = 0;
-      $flag = false;
-      $now = Carbon::now();
-      $data = [];
-
-      $head = [
-        'CCCODE' => trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract),
-        'MERCHANT_NAME' => trim($this->sysinfo->tenantname),
-        'TRN_DATE' => $date->format('Y-m-d'),
-      ];
-      
-      $data['EOD'][1] = trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract);
-      $data['EOD'][2] = trim($this->sysinfo->tenantname);
-      $data['EOD'][3] = (trim($this->sysinfo->pos_no)+0);
-      $data['EOD'][4] = $date->format('Y-m-d');
-      $data['EOD'][6] = $data['EOD'][5] = NULL;
-
-      
-      foreach (range(7,108) as $k => $v)
-        $data['EOD'][$v] = 0;
-      
-      $data['EOD'][109] = trim($this->sysinfo->zread_ctr);
-      $data['EOD'][110] = trim($this->sysinfo->zread_ctr)+1;
-      $data['EOD'][111] = 0;
-
-      $ds = [];
-      $tmp_hr = NULL;
-      $last_cslipno = NULL;
-
-
-      for ($i=1; $i<=$record_numbers; $i++) {
-        $row = dbase_get_record_with_names($db, $i);
-        try {
-          $vfpdate = vfpdate_to_carbon(trim($row['ORDDATE']));
-        } catch(Exception $e) {
-          continue;
-        }
-        
-        if ($vfpdate->format('Y-m-d')==$date->format('Y-m-d')) {
-
-          $dt = Carbon::parse($vfpdate->format('Y-m-d').' '.trim($row['ORDTIME']));
+          // $this->info($dt->format('H').' '.($now->format('H')-1).' '.$now->format('H'));
+          
           $r = $this->associateAttributes($row);
             
-          // $this->info($dt->format('H').' '.($now->format('H')-1).' '.$now->format('H'));
-            
           if ($tmp_hr == $r['vfpdate']->format('H')) {
-            // $this->info($update.' '.$r['vfpdate']->format('Y-m-d H:i:s').' '.$r['cslipno']);
+            // $this->info($update.' '.$r['vfpdate']->format('Y-m-d H:i:s').' '.$r['cslipno'].' -1');
             $data[$tmp_hr][$update] = $this->aliGetTrans($date, $r); //****************************************************************************/
-
 
             $last_cslipno = $r['cslipno'];
           } else {
             if (!is_null($tmp_hr)) {
               
               // generate hourly CSV
-              $this->aliGenHourlyCsv($date, $data, $tmp_hr, $last_cslipno, $head); //****************************************************************************/
+              // $this->aliGenHourlyCsv($date, $data, $tmp_hr, $last_cslipno, $head); //****************************************************************************/
               
               $tmp_hr = $r['vfpdate']->format('H');
               $data[$tmp_hr] = [];        
@@ -4717,175 +4797,212 @@ class Eod extends Command
               // $this->info('this is 1st run'.' '.$tmp_hr);
             }
             
-            // $this->info($update.' '.$r['vfpdate']->format('Y-m-d H:i:s').' '.$r['cslipno']);
+            // $this->info($update.' '.$r['vfpdate']->format('Y-m-d H:i:s').' '.$r['cslipno'].' -2');
             $data[$tmp_hr][$update] = $this->aliGetTrans($date, $r); //****************************************************************************/
 
-            
-            if (is_null($last_cslipno))
-              $last_cslipno = $r['cslipno'];
+            $last_cslipno = $r['cslipno'];
           }
 
 
 
-            if (is_null($data['EOD'][5]))
-              $data['EOD'][5] = $r['cslipno'];
-            $data['EOD'][6] = $r['cslipno'];
-            
-            $data['EOD'][7] += $r['chrg_grs'];
+          if (is_null($data['EOD'][5]))
+            $data['EOD'][5] = $r['cslipno'];
+          
+          $data['EOD'][6] = $r['cslipno'];
+          $data['EOD'][7] += $r['chrg_grs'];
 
 
-            if ($r['sr_disc']>0) {
-              $data['EOD'][11] += $r['tot_chrg']; // vat exmpt sales
-              $data['EOD'][12] += $r['vat_xmpt']; // vat exmpt samount
-              
-              $data['EOD'][22] += $r['sr_disc']; // senior disc amt
-              // $data['EOD'][23] += $r['sr_body']; // senior pax
-              $data['EOD'][23]++; // senior disc trx
-              $data['EOD'][69]++; // # of vat xmpt trans
-              
-              $data['EOD'][107] += $r['sr_body']; // total customer
+          if ($r['sr_disc']>0) {
+            $data['EOD'][11] += $r['tot_chrg']; // vat exmpt sales
+            $data['EOD'][12] += $r['vat_xmpt']; // vat exmpt samount
+            $data['EOD'][69]++; // # of vat xmpt trans
+
+            if (app()->environment()=='local')  {
+              if ($r['sr_body']==1) { // if 1 lang senior
+                if (str_contains($r['card_name'], 'PWD')) {
+                  $data['EOD'][24] += $r['sr_disc']; // senior disc amt
+                  $data['EOD'][25]++; // senior disc trx
+                } else {
+                  $data['EOD'][22] += $r['sr_disc']; // senior disc amt
+                  $data['EOD'][23]++; // senior disc trx
+                }
+              } else {
+                $data['EOD'][22] += $r['sr_disc']; // senior disc amt
+                $data['EOD'][23]++; // senior disc trx
+              }
             } else {
-
-              $data['EOD'][8] += $r['vat']; // vat amount
-              $data['EOD'][9] += ($r['tot_chrg']-$r['vat']); // vatable amount
-
-
-
-              // compute emp disc
-              if ($r['dis_emp']>0) {
-                $data['EOD'][26] +=$r['dis_emp']; // total disc amt
-                $data['EOD'][27]++; // total disc trans
-              }
-              // compute other disc
-              if ($r['dis_gpc']>0 || $r['dis_vip']>0 || $r['dis_pwd']>0 || $r['dis_udisc']>0 || $r['dis_prom']>0) {
-                $data['EOD'][31] +=($r['dis_gpc']+$r['dis_vip']+$r['dis_pwd']+$r['dis_udisc']+$r['dis_prom']); // total disc amt
-                $data['EOD'][32]++; // total disc trans
-              }
-              $data['EOD'][107] += ($r['sr_tcust']-$r['sr_body']); // total customer
+              $data['EOD'][22] += $r['sr_disc']; // senior disc amt
+              $data['EOD'][23]++; // senior disc trx
             }
+            
+            $data['EOD'][107] += $r['sr_body']; // total customer
+          } else {
 
-            if ($r['sr_disc']>0 || $r['oth_disc']>0 || $r['u_disc']>0 || $r['promo_amt']>0) {
-              $data['EOD'][18] +=$r['disc_amt']; // total disc amt
-              $data['EOD'][19]++; // total disc trans
+            $data['EOD'][8] += $r['vat']; // vat amount
+            $data['EOD'][9] += ($r['tot_chrg']-$r['vat']); // vatable amount
+
+
+
+            // compute emp disc
+            if ($r['dis_emp']>0) {
+              $data['EOD'][26] +=$r['dis_emp']; // total disc amt
+              $data['EOD'][27]++; // total disc trans
             }
-
-
-            // CASH or CHARGE sales
-            if ($r['chrg_type']=='CASH') {
-              $data['EOD'][35] += $r['tot_chrg']; //total cash sales
-              $data['EOD'][72]++; // total cash trans
-            } else 
-
-            if (in_array($r['chrg_type'], ['CHARGE', 'MAYA', 'BDO', 'BANKARD'])) {
-
-              switch (trim($r['card_type'])) {
-                case 'MASTER':
-                  $data['EOD'][36] += $r['tot_chrg'];
-                  $data['EOD'][42] += $r['tot_chrg'];
-                  $data['EOD'][73]++;
-                  $data['EOD'][79]++;
-                  break;
-                case 'VISA':
-                  $data['EOD'][36] += $r['tot_chrg'];
-                  $data['EOD'][43] += $r['tot_chrg'];
-                  $data['EOD'][73]++;
-                  $data['EOD'][80]++;
-                  break;
-                case 'AMEX':
-                  $data['EOD'][36] += $r['tot_chrg'];
-                  $data['EOD'][44] += $r['tot_chrg'];
-                  $data['EOD'][73]++;
-                  $data['EOD'][81]++;
-                  break;
-                case 'DINERS':
-                  $data['EOD'][36] += $r['tot_chrg'];
-                  $data['EOD'][45] += $r['tot_chrg'];
-                  $data['EOD'][73]++;
-                  $data['EOD'][82]++;
-                  break;
-                case 'JCB':
-                  $data['EOD'][36] += $r['tot_chrg'];
-                  $data['EOD'][46] += $r['tot_chrg'];
-                  $data['EOD'][73]++;
-                  $data['EOD'][83]++;
-                  break;
-                case 'GCASH':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][47] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][84]++;
-                  break;
-                case 'MAYA':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][48] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][85]++;
-                  break;
-                case 'PAYMAYA':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][48] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][85]++;
-                  break;
-                case 'ALIPAY':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][49] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][86]++;
-                  break;
-                case 'ALI':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][49] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][86]++;
-                  break;               
-                case 'WECHATPAY':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][50] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][87]++;
-                  break;
-                case 'WECHAT':
-                  $data['EOD'][37] += $r['tot_chrg'];
-                  $data['EOD'][50] += $r['tot_chrg'];
-                  $data['EOD'][74]++;
-                  $data['EOD'][87]++;
-                  break;
-                default:
-                  $data['EOD'][39] += $r['tot_chrg'];
-                  $data['EOD'][76]++;
-                  break;
-              }
-            } else if (in_array($r['chrg_type'], ['GRAB', 'PANDA'])) {
-              $data['EOD'][39] += $r['tot_chrg'];
-              $data['EOD'][76]++;
-              if ($r['chrg_type']=='GRAB') {
-                $data['EOD'][51] += $r['tot_chrg'];
-                $data['EOD'][88]++;
-              }
-              if ($r['chrg_type']=='PANDA') {
-                $data['EOD'][52] += $r['tot_chrg'];
-                $data['EOD'][89]++;
-              }
-            } else { // ZAP
-              $data['EOD'][39] += $r['tot_chrg'];
-              $data['EOD'][76]++;
+            // compute other disc
+            if ($r['dis_gpc']>0 || $r['dis_vip']>0 || $r['dis_pwd']>0 || $r['dis_udisc']>0 || $r['dis_prom']>0) {
+              $data['EOD'][31] +=($r['dis_gpc']+$r['dis_vip']+$r['dis_pwd']+$r['dis_udisc']+$r['dis_prom']); // total disc amt
+              $data['EOD'][32]++; // total disc trans
             }
+            $data['EOD'][107] += ($r['sr_tcust']-$r['sr_body']); // total customer
+          }
+
+          if ($r['sr_disc']>0 || $r['oth_disc']>0 || $r['u_disc']>0 || $r['promo_amt']>0) {
+            $data['EOD'][18] +=$r['disc_amt']; // total disc amt
+            $data['EOD'][19]++; // total disc trans
+          }
+
+
+          // CASH or CHARGE sales
+          if ($r['chrg_type']=='CASH') {
+            $data['EOD'][35] += $r['tot_chrg']; //total cash sales
+            $data['EOD'][72]++; // total cash trans
+          } else 
+
+          if (in_array($r['chrg_type'], ['CHARGE', 'MAYA', 'BDO', 'BANKARD'])) {
+
+            switch (trim($r['card_type'])) {
+              case 'MASTER':
+                $data['EOD'][36] += $r['tot_chrg'];
+                $data['EOD'][42] += $r['tot_chrg'];
+                $data['EOD'][73]++;
+                $data['EOD'][79]++;
+                break;
+              case 'VISA':
+                $data['EOD'][36] += $r['tot_chrg'];
+                $data['EOD'][43] += $r['tot_chrg'];
+                $data['EOD'][73]++;
+                $data['EOD'][80]++;
+                break;
+              case 'AMEX':
+                $data['EOD'][36] += $r['tot_chrg'];
+                $data['EOD'][44] += $r['tot_chrg'];
+                $data['EOD'][73]++;
+                $data['EOD'][81]++;
+                break;
+              case 'DINERS':
+                $data['EOD'][36] += $r['tot_chrg'];
+                $data['EOD'][45] += $r['tot_chrg'];
+                $data['EOD'][73]++;
+                $data['EOD'][82]++;
+                break;
+              case 'JCB':
+                $data['EOD'][36] += $r['tot_chrg'];
+                $data['EOD'][46] += $r['tot_chrg'];
+                $data['EOD'][73]++;
+                $data['EOD'][83]++;
+                break;
+              case 'GCASH':
+                $data['EOD'][37] += $r['tot_chrg'];
+                $data['EOD'][47] += $r['tot_chrg'];
+                $data['EOD'][74]++;
+                $data['EOD'][84]++;
+                break;
+              case 'MAYA':
+                $data['EOD'][37] += $r['tot_chrg'];
+                $data['EOD'][48] += $r['tot_chrg'];
+                $data['EOD'][74]++;
+                $data['EOD'][85]++;
+                break;
+              case 'PAYMAYA':
+                $data['EOD'][37] += $r['tot_chrg'];
+                $data['EOD'][48] += $r['tot_chrg'];
+                $data['EOD'][74]++;
+                $data['EOD'][85]++;
+                break;
+              case 'ALIPAY':
+                $data['EOD'][37] += $r['tot_chrg'];
+                $data['EOD'][49] += $r['tot_chrg'];
+                $data['EOD'][74]++;
+                $data['EOD'][86]++;
+                break;
+              case 'ALI':
+                $data['EOD'][37] += $r['tot_chrg'];
+                $data['EOD'][49] += $r['tot_chrg'];
+                $data['EOD'][74]++;
+                $data['EOD'][86]++;
+                break;               
+              case 'WECHATPAY':
+                $data['EOD'][37] += $r['tot_chrg'];
+                $data['EOD'][50] += $r['tot_chrg'];
+                $data['EOD'][74]++;
+                $data['EOD'][87]++;
+                break;
+              case 'WECHAT':
+                $data['EOD'][37] += $r['tot_chrg'];
+                $data['EOD'][50] += $r['tot_chrg'];
+                $data['EOD'][74]++;
+                $data['EOD'][87]++;
+                break;
+              default:
+                $data['EOD'][39] += $r['tot_chrg'];
+                $data['EOD'][76]++;
+                break;
+            }
+          } else
+
+          if (in_array($r['chrg_type'], ['GRAB', 'PANDA'])) {
+              // $data['EOD'][39] += $r['tot_chrg'];
+            $data['EOD'][76]++;
+            if ($r['chrg_type']=='GRAB') {
+              $data['EOD'][51] += $r['tot_chrg'];
+              $data['EOD'][88]++;
+            }
+            if ($r['chrg_type']=='PANDA') {
+              $data['EOD'][52] += $r['tot_chrg'];
+              $data['EOD'][89]++;
+            }
+          } else { // ZAP
+            $data['EOD'][39] += $r['tot_chrg'];
+            $data['EOD'][76]++;
+          }
 
           $update++;  
           $data['EOD'][108]++;
           $data['EOD'][111] += $r['tot_chrg']; // NETSALES
-        }
 
-        if (!$flag && $vfpdate->gt($date)) {
-          // $this->info('last run.........');
-          // generate last hourly CSV
-          $this->aliGenHourlyCsv($date, $data, $tmp_hr, $r['cslipno'], $head); /****************************************************************************/
-          $flag = true;
-        }
+
+          if (array_key_exists($r['vfpdate']->format('H'), $hrly_data)) {
+            $hrly_data[$r['vfpdate']->format('H')]['gross'] += ($r['tot_chrg']); 
+            $hrly_data[$r['vfpdate']->format('H')]['cnt']++; 
+            $hrly_data[$r['vfpdate']->format('H')]['cslipno'] = $r['cslipno']; 
+          } else {
+            $hrly_data[$r['vfpdate']->format('H')]['gross'] = ($r['tot_chrg']); 
+            $hrly_data[$r['vfpdate']->format('H')]['cnt'] = 1; 
+            $hrly_data[$r['vfpdate']->format('H')]['cslipno'] = $r['cslipno']; 
+          }
+
+          // php artisan eod YYYY-MMM-DD --lessorcode=ali --payment=rerun
+          if ($this->option('payment')=='rerun') {
+            $trans = $this->aliGetTrans($date, $r);
+            $this->aliGenerateCSVPosted($date, $trans, $r['cslipno']);
+          }
+
+          // $this->info('r[cslipno]:'. $r['cslipno'] .'  last_cslipno:'.$last_cslipno.' flag:'.json_encode($flag));
+        } // end: vfpdate == date
+
+         // print_r($data);
+
+        
       } // end:for 
 
+       // print_r($data);
+      // print_r($hrly_data);
+      foreach($hrly_data as $hr => $hrly)
+        $this->aliGenHourlyCsv($date, $data, $hr, $hrly['cslipno'], $head); /****************************************************************************/
+
+      $this->aliGenHourlyTxt($date, $hrly_data);
       $this->aliGenEodCsv($date, $data['EOD']);
+
       // print_r($data['EOD']);
       dbase_close($db);
       return $ds;
@@ -4893,23 +5010,59 @@ class Eod extends Command
       throw new Exception("Cannot locate CHARGES.DBF"); 
     }
   }
-    
-  private function aliDaily(Carbon $date, $c) {
 
-    $ext = str_pad($this->sysinfo->pos_no, 3, '0', STR_PAD_LEFT);
-    $filename = $date->format('mdY');
+  private function aliGenHourlyTxt(Carbon $date, $data) {
 
-    //$this->info(' ');
-    
-    exit;
+    $tenantname = trim($this->sysinfo->tenantname);
+    $ext = 'TXT';
+    $datas = [];
 
-    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m');
-    if(!is_dir($dir))
-      mkdir($dir, 0775, true);
+    $filename = trim($this->sysinfo->contract).$date->format('md').'H';
+    $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
+    if (!is_dir($dir))
+      mdir($dir);
     $file = $dir.DS.$filename.'.'.$ext;
     $fp = fopen($file, 'w');
 
+    $datas[0] = ['TRANDATE','HOUR','SALES','TRANCNT','TENTNAME','TERMNUM'];
+
+    $d = Carbon::parse($date->format('Y-m-d').' 06:00:00');
+
+    for($i=1; $i<=24; $i++) {
+      // $this->info($d->format('Y-m-d H:i:s'));
+
+      $gross = $cnt = 0;
+      if (array_key_exists($d->format('H'), $data)) {
+        $gross = $data[$d->format('H')]['gross'];
+        $cnt = $data[$d->format('H')]['cnt'];
+      } 
+
+      $datas[$i] = [
+        $d->format('m/d/Y'), 
+        $d->format('H:i'),
+        number_format($gross, 2, '.', ''),
+        $cnt,
+        $tenantname,
+        1,
+      ];
+
+      $d->addHour();
+    }
+
+    // print_r($datas);
+
+    $this->toTXT($datas, $date, $filename, $ext, $dir, false);
+
+    $file = $dir.DS.$filename.'.'.$ext;
+
+    $newfile = $filename.'.'.$ext;
+
+    $this->verifyCopyFile($file, $newfile);
   }
+
+
+
+
 
 
 
@@ -4917,6 +5070,8 @@ class Eod extends Command
 
 
   /*********************************************************** end: ALI ****************************************/
+
+
 
 
 
