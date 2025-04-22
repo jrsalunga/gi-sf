@@ -713,6 +713,18 @@ class RecomputeBir extends Command
       array_push($lines, bpad("MIN# 20030315411889836", 40));
     }
 
+
+    if ($brcode=='SLP') {
+      array_push($lines, bpad("GILIGAN'S ISLAND BAGUIO,INC.", 40));
+      array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));
+      array_push($lines, bpad("GILIGAN'S STARMALL LAS PIÑAS", 40));
+      array_push($lines, bpad("G/F STARMALL C.V. STARR PHILAMLIFE", 40));
+      array_push($lines, bpad("VILL.PAMPLONA DOS LAS PI¥AS CITY1740", 40));
+      array_push($lines, bpad("#006-070-024-005 VAT", 40));
+      array_push($lines, bpad("S/N S1DDCWEO", 40));
+      array_push($lines, bpad("MIN# 140349870140349870", 40));
+    }
+
     return $lines;
 
   }
