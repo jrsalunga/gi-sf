@@ -257,7 +257,6 @@ class Eod extends Command
           $dir = 'D:'.DS.'AYALA'.DS.$this->date->format('Y').DS.$this->date->format('m').DS.$this->date->format('d');
         else
           $dir = 'D:'.DS.'AYALA'.DS.$this->date->format('Y');
-        
         if (!is_dir($dir))
           mdir($dir);
         return $this->out = $dir;
@@ -298,6 +297,23 @@ class Eod extends Command
 
 
       alog('Copying: '.$file.' - '.$newfile);
+
+      
+
+      if ($this->lessor=='ALI') 
+        if(strtolower($p['extension'])=='csv') {
+          $dir = 'D:'.DS.'AYALA'.DS.'tenant_api'.DS.'storage'.DS.'app'.DS.'OUTGOING';
+          if (!is_dir($dir))
+            mdir($dir);
+          $this->out = $dir;
+        } else 
+          $this->getOut();
+      
+      
+
+
+
+
       if (copy($file, $this->out.DS.$newfile)) {
         $this->info('OK - Copying: '.$this->out.DS.$newfile);
         alog($file.' - Success on copying');
@@ -4289,7 +4305,7 @@ class Eod extends Command
 
   private function aliGenerateCSVPosted(Carbon $date, array $data, $cslipno) {
     
-    $filename = '7900'.trim($this->sysinfo->contract).$date->format('mdy').str_pad($this->sysinfo->pos_no, 3, 0, STR_PAD_LEFT).'_'.$cslipno.'.csv';
+    $filename = trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract).$date->format('mdy').str_pad($this->sysinfo->pos_no, 3, 0, STR_PAD_LEFT).'_'.$cslipno.'.csv';
     $dir = $this->getpath().DS.$date->format('Y').DS.$date->format('m').DS.$date->format('d');
     if (!is_dir($dir))
       mdir($dir);
@@ -4297,7 +4313,7 @@ class Eod extends Command
     $fp = fopen($file, 'w');
 
     $head = [
-      'CCCODE' => '7900'.trim($this->sysinfo->contract),
+      'CCCODE' => trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract),
       'MERCHANT_NAME' => trim($this->sysinfo->tenantname),
       'TRN_DATE' => $date->format('Y-m-d'),
       'NO_TRN' => 1,
@@ -4738,7 +4754,7 @@ class Eod extends Command
       $hrly_data = [];
 
       $head = [
-        'CCCODE' => '7900'.trim($this->sysinfo->contract),
+        'CCCODE' => trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract),
         'MERCHANT_NAME' => trim($this->sysinfo->tenantname),
         'TRN_DATE' => $date->format('Y-m-d'),
       ];
