@@ -31,10 +31,20 @@ class Eod extends Command
   public function handle() {
 
     $date = $this->argument('date');
-    if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $date)) {
-      $this->info('Invalid date.');
-      alog('Invalid date: '.$date);
-      exit;
+
+    if (strtolower($date) === 'auto') {
+
+      // $this->info(Carbon::parse($this->sysinfo->trandate)->format('Y-m-d'));
+      // $this->info($this->sysinfo->lessorcode);
+
+      
+      $date = Carbon::parse($this->sysinfo->trandate)->format('Y-m-d');
+    }  else {
+      if (!preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/", $date)) {
+        $this->info('Invalid date.');
+        alog('Invalid date: '.$date);
+        exit;
+      }
     }
     
     $ext = $this->option('ext');
@@ -3146,8 +3156,7 @@ class Eod extends Command
   public function VER(Carbon $date, $ext) {
     $c = $this->verCharges($date);
     
-    $this->verDaily($date, $c, $ext='txt');
-    
+    $this->verDaily($date, $c, $ext='txt');    
   }
 
   private function verDaily(Carbon $date, $c, $ext) {
@@ -3256,7 +3265,6 @@ class Eod extends Command
 
     $this->verifyCopyFile($file, $newfile);  
   }
-
 
   private function verCharges(Carbon $date) {
     $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
@@ -3404,8 +3412,6 @@ class Eod extends Command
 
     $this->siaCombine($date, $ext);
   }
-
-
 
   private function siaCharges(Carbon $date, $ext='csv') {
 
@@ -3786,7 +3792,6 @@ class Eod extends Command
     return false;
   }
 
-
   private function siaCountCslipno(Carbon $date) {
 
     $dbf_file = $this->extracted_path.DS.'SALESMTD.DBF';
@@ -3814,7 +3819,6 @@ class Eod extends Command
       $this->info('SALESMTD.DBF not found!');
     return [];
   }
-
 
   private function siaSalesmtd(Carbon $date, array $disc, array $s, $ext='csv') {
 
@@ -3945,7 +3949,6 @@ class Eod extends Command
     return false;
   }
 
-
   private function siaCombine(Carbon $date, $ext='csv') {
     $cnt = 31;
     $ctr = 0;
@@ -4026,7 +4029,7 @@ class Eod extends Command
   /*********************************************************** ALI ****************************************/
   public function ALI(Carbon $date, $ext) {
 
-    $this->info('mode:'.$this->option('mode').' - payment:'.$this->option('payment'));
+    // $this->info('mode:'.$this->option('mode').' - payment:'.$this->option('payment'));
 
     if($this->option('payment')==='true')
       $this->aliProcessPostedPayment($date);
@@ -4034,6 +4037,7 @@ class Eod extends Command
       $this->aliCharges($date);
   }
 
+  # Generate All Receipt to CVS - not applicable anymore
   private function aliProcessPostedPayment(Carbon $date) {
     $dbf_file = $this->extracted_path.DS.'CHARGES.DBF';
     if (file_exists($dbf_file)) {
@@ -4606,11 +4610,11 @@ class Eod extends Command
       number_format(0, 2, '.', ''),
       number_format($vat_amnt, 2, '.', ''),
       trim($this->sysinfo->tenantname),
-      $data[5],
-      $data[6],
-      $data[5],
-      $data[6],
-      $data[108],
+      number_format($data[5], 0, '.', ''),
+      number_format($data[6], 0, '.', ''),
+      number_format($data[5], 0, '.', ''),
+      number_format($data[6], 0, '.', ''),
+      number_format($data[108], 0, '.', ''),
       number_format(0, 2, '.', ''),
       number_format(0, 2, '.', ''),
       number_format($vatexempt_sls, 2, '.', ''),
@@ -4689,8 +4693,8 @@ class Eod extends Command
     array_push($lines, rpad('Ayala Gross', 23).lpad(nf($data['ayala_gross'], 2, true), 17));
     array_push($lines, rpad('Old Grand Total', 23).lpad(nf($data['old_grntot'], 2, true), 17));
     array_push($lines, rpad('New Grand Total', 23).lpad(nf($data['new_grntot'], 2, true), 17));
-    array_push($lines, rpad('Transaction Count', 23).lpad(nf($data['trans_cnt'], 0), 17));
-    array_push($lines, rpad('Customer Count', 23).lpad(nf($data['cust_cnt'], 0), 17));
+    array_push($lines, rpad('Transaction Count', 23).lpad(nf($data['trans_cnt'], 0, true), 17));
+    array_push($lines, rpad('Customer Count', 23).lpad(nf($data['cust_cnt'], 0, true), 17));
     array_push($lines, rpad('Cash Sales', 23).lpad(nf($data['cash_sale'], 2, true), 17));
     array_push($lines, rpad('Charge Sales', 23).lpad(nf($data['charge_sale'], 2, true), 17));
     array_push($lines, bpad("----------------------------------------", 40));
@@ -5001,7 +5005,7 @@ class Eod extends Command
           if ($this->option('payment')=='rerun') {
             $trans = $this->aliGetTrans($date, $r);
             $this->aliGenerateCSVPosted($date, $trans, $r['cslipno']);
-          }
+          } 
 
           // $this->info('r[cslipno]:'. $r['cslipno'] .'  last_cslipno:'.$last_cslipno.' flag:'.json_encode($flag));
         } // end: vfpdate == date
@@ -5016,8 +5020,14 @@ class Eod extends Command
       foreach($hrly_data as $hr => $hrly)
         $this->aliGenHourlyCsv($date, $data, $hr, $hrly['cslipno'], $head); /****************************************************************************/
 
-      $this->aliGenHourlyTxt($date, $hrly_data);
-      $this->aliGenEodCsv($date, $data['EOD']);
+      // $this->line($this->argument('date'));
+
+      if (strtolower($this->argument('date')) !== 'auto') {
+        $this->aliGenHourlyTxt($date, $hrly_data);
+        $this->aliGenEodCsv($date, $data['EOD']);
+      } else {
+        alog('HOURLY - Trigger: '.Carbon::now());
+      }
 
       // print_r($data['EOD']);
       dbase_close($db);
