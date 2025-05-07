@@ -32,11 +32,10 @@ class Eod extends Command
 
     $date = $this->argument('date');
 
-    if (strtolower($date) === 'auto') {
+    if (strtolower($date) === 'hourly') {
 
       // $this->info(Carbon::parse($this->sysinfo->trandate)->format('Y-m-d'));
       // $this->info($this->sysinfo->lessorcode);
-
       
       $date = Carbon::parse($this->sysinfo->trandate)->format('Y-m-d');
     }  else {
@@ -5022,7 +5021,7 @@ class Eod extends Command
 
       // $this->line($this->argument('date'));
 
-      if (strtolower($this->argument('date')) !== 'auto') {
+      if (strtolower($this->argument('date')) !== 'hourly') {
         $this->aliGenHourlyTxt($date, $hrly_data);
         $this->aliGenEodCsv($date, $data['EOD']);
       } else {
