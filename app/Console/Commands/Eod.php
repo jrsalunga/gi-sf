@@ -4317,7 +4317,7 @@ class Eod extends Command
 
     $head = [
       'CCCODE' => trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract),
-      'MERCHANT_NAME' => trim($this->sysinfo->tenantname),
+      'MERCHANT_NAME' => $this->aliGetTenantName(),
       'TRN_DATE' => $date->format('Y-m-d'),
       'NO_TRN' => 1,
     ];
@@ -4608,7 +4608,7 @@ class Eod extends Command
       number_format(0, 2, '.', ''),
       number_format(0, 2, '.', ''),
       number_format($vat_amnt, 2, '.', ''),
-      trim($this->sysinfo->tenantname),
+      $this->aliGetTenantName(),
       number_format($data[5], 0, '.', ''),
       number_format($data[6], 0, '.', ''),
       number_format($data[5], 0, '.', ''),
@@ -4687,8 +4687,8 @@ class Eod extends Command
     array_push($lines, rpad('Total Non Taxable', 23).lpad(nf($data['vatexempt_sls'], 2, true), 17));
     array_push($lines, rpad('Total Exempt Amount', 23).lpad(nf($data['vatexempt_amnt'], 2, true), 17));
     array_push($lines, rpad('Net Sales', 23).lpad(nf($data['netsales'], 2, true), 17));
-    array_push($lines, rpad('Raw Gross', 23).lpad(nf($data['gross_sls'], 2, true), 17));
-    array_push($lines, rpad('TXT Raw Gross', 23).lpad(nf($data['txt_gross_sls'], 2, true), 17));
+    array_push($lines, rpad('CSV Gross', 23).lpad(nf($data['gross_sls'], 2, true), 17));
+    array_push($lines, rpad('TXT Gross', 23).lpad(nf($data['txt_gross_sls'], 2, true), 17));
     array_push($lines, rpad('Ayala Gross', 23).lpad(nf($data['ayala_gross'], 2, true), 17));
     array_push($lines, rpad('Old Grand Total', 23).lpad(nf($data['old_grntot'], 2, true), 17));
     array_push($lines, rpad('New Grand Total', 23).lpad(nf($data['new_grntot'], 2, true), 17));
@@ -4696,6 +4696,7 @@ class Eod extends Command
     array_push($lines, rpad('Customer Count', 23).lpad(nf($data['cust_cnt'], 0, true), 17));
     array_push($lines, rpad('Cash Sales', 23).lpad(nf($data['cash_sale'], 2, true), 17));
     array_push($lines, rpad('Charge Sales', 23).lpad(nf($data['charge_sale'], 2, true), 17));
+    array_push($lines, rpad('ZRead Count', 23).lpad(nf($data['zcounter'], 0, true), 17));
     array_push($lines, bpad("----------------------------------------", 40));
     array_push($lines, bpad('DATE: '.$date->format('m/d/Y'), 40));
     array_push($lines, bpad(' ', 40));
@@ -4740,6 +4741,19 @@ class Eod extends Command
       array_push($lines, bpad("BIR Accredit # 040-205257440-000305", 40));
     }
 
+    if ($brcode=='ANG') {
+      array_push($lines, bpad("ALQUIROS, FILIBERTO SAINZ", 40));
+      array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));
+      array_push($lines, bpad("MARQUEE MALL", 40));
+      array_push($lines, bpad("G,F MARQUEEMALL NEPO AVENUE,", 40));
+      array_push($lines, bpad("ANGELES CITY, 2009", 40));
+      array_push($lines, bpad("#133-162-738-002 VAT", 40));
+      array_push($lines, bpad("S/N AZLF920087S", 40));
+      array_push($lines, bpad("MIN# 100139647", 40));
+      array_push($lines, bpad("PTU# 0810-21A-76229-002", 40));
+      array_push($lines, bpad("BIR Accredit # 040-205257440-000305", 40));
+    }
+
     return $lines;
   }
 
@@ -4758,7 +4772,7 @@ class Eod extends Command
 
       $head = [
         'CCCODE' => trim($this->sysinfo->tenantcode).trim($this->sysinfo->contract),
-        'MERCHANT_NAME' => trim($this->sysinfo->tenantname),
+        'MERCHANT_NAME' => $this->aliGetTenantName(),
         'TRN_DATE' => $date->format('Y-m-d'),
       ];
       
@@ -5038,7 +5052,7 @@ class Eod extends Command
 
   private function aliGenHourlyTxt(Carbon $date, $data) {
 
-    $tenantname = trim($this->sysinfo->tenantname);
+    $tenantname = $this->aliGetTenantName();
     $ext = 'TXT';
     $datas = [];
 
@@ -5083,6 +5097,21 @@ class Eod extends Command
     $newfile = $filename.'.'.$ext;
 
     $this->verifyCopyFile($file, $newfile);
+  }
+
+  private function aliGetTenantName() {
+
+    switch (trim($this->sysinfo->gi_brcode)) {
+      case 'ANG':
+        return "GILIGAN'S ISLAND RESTAURANT";
+        break;
+      case 'MAR':
+        return "GILIGAN'S";
+        break;
+      default:
+        return trim($this->sysinfo->tenantname);
+        break;
+    }
   }
 
 
