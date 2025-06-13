@@ -4201,12 +4201,6 @@ class Eod extends Command
           $wechat = $row['tot_chrg'];
           $epay = $row['tot_chrg'];
           break;
-        case 'SHOPEE':
-        case 'SHOPEEPAY':
-        case 'QRPH':
-        case 'GRABPAY':
-          $epay = $row['tot_chrg'];
-          break;
         default:
           $other_pay = $row['tot_chrg'];
           break;
@@ -4537,7 +4531,7 @@ class Eod extends Command
       'NO_CARD' => number_format($data[73], 0, '.', ''),
       'NO_EPAY' => number_format($data[74], 0, '.', ''),
       'NO_DCARD_SLS' => number_format(0, 0, '.', ''),
-      'NO_OTHER_SLS' => number_format(0, 0, '.', ''),
+      'NO_OTHER_SLS' => number_format($data[76], 0, '.', ''),
       'NO_CHECK' => number_format(0, 0, '.', ''),
       'NO_GC' => number_format(0, 0, '.', ''),
       'NO_MASTERCARD_SLS' => number_format($data[79], 0, '.', ''),
@@ -4935,50 +4929,50 @@ class Eod extends Command
                 $data['EOD'][83]++;
                 break;
               case 'GCASH':
-                $data['EOD'][37] += $r['tot_chrg'];
-                $data['EOD'][47] += $r['tot_chrg'];
-                $data['EOD'][74]++;
+                $data['EOD'][37] += $r['tot_chrg']; // EPAY_SLS
+                $data['EOD'][47] += $r['tot_chrg']; // GCASH_SLS
+                $data['EOD'][74]++; // NO_EPAY
                 $data['EOD'][84]++;
                 break;
               case 'MAYA':
-                $data['EOD'][37] += $r['tot_chrg'];
-                $data['EOD'][48] += $r['tot_chrg'];
-                $data['EOD'][74]++;
+                $data['EOD'][37] += $r['tot_chrg']; // EPAY_SLS
+                $data['EOD'][48] += $r['tot_chrg']; // PAYMAYA_SLS
+                $data['EOD'][74]++; // NO_EPAY
                 $data['EOD'][85]++;
                 break;
               case 'PAYMAYA':
-                $data['EOD'][37] += $r['tot_chrg'];
-                $data['EOD'][48] += $r['tot_chrg'];
-                $data['EOD'][74]++;
+                $data['EOD'][37] += $r['tot_chrg']; // EPAY_SLS
+                $data['EOD'][48] += $r['tot_chrg']; // PAYMAYA_SLS
+                $data['EOD'][74]++; // NO_EPAY
                 $data['EOD'][85]++;
                 break;
               case 'ALIPAY':
-                $data['EOD'][37] += $r['tot_chrg'];
+                $data['EOD'][37] += $r['tot_chrg']; // EPAY_SLS
                 $data['EOD'][49] += $r['tot_chrg'];
-                $data['EOD'][74]++;
+                $data['EOD'][74]++; // NO_EPAY
                 $data['EOD'][86]++;
                 break;
               case 'ALI':
-                $data['EOD'][37] += $r['tot_chrg'];
+                $data['EOD'][37] += $r['tot_chrg']; // EPAY_SLS
                 $data['EOD'][49] += $r['tot_chrg'];
-                $data['EOD'][74]++;
+                $data['EOD'][74]++; // NO_EPAY
                 $data['EOD'][86]++;
                 break;               
               case 'WECHATPAY':
-                $data['EOD'][37] += $r['tot_chrg'];
+                $data['EOD'][37] += $r['tot_chrg']; // EPAY_SLS
                 $data['EOD'][50] += $r['tot_chrg'];
-                $data['EOD'][74]++;
+                $data['EOD'][74]++; // NO_EPAY
                 $data['EOD'][87]++;
                 break;
               case 'WECHAT':
-                $data['EOD'][37] += $r['tot_chrg'];
+                $data['EOD'][37] += $r['tot_chrg']; // EPAY_SLS
                 $data['EOD'][50] += $r['tot_chrg'];
-                $data['EOD'][74]++;
+                $data['EOD'][74]++; // NO_EPAY
                 $data['EOD'][87]++;
                 break;
               default:
-                $data['EOD'][39] += $r['tot_chrg'];
-                $data['EOD'][76]++;
+                $data['EOD'][39] += $r['tot_chrg']; // OTHER_SLS
+                $data['EOD'][76]++; // NO_OTHER_SLS
                 break;
             }
           } else
