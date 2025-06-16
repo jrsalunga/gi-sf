@@ -4748,6 +4748,32 @@ class Eod extends Command
       array_push($lines, bpad("BIR Accredit # 040-205257440-000305", 40));
     }
 
+    if ($brcode=='AMK') {
+      array_push($lines, bpad("ALQUIROS, JO-ANDREW GARCIA", 40));
+      array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));
+      array_push($lines, bpad("GILIGAN'S AYALA MALL MARIKINA", 40));
+      array_push($lines, bpad("UNIT F106 AYALA MALL MARIKINA,", 40));
+      array_push($lines, bpad("LIWASAN KALAYAAN ST., MARIKINA CITY", 40));
+      array_push($lines, bpad("#199-013-974-000 VAT", 40));
+      array_push($lines, bpad("S/N Z9ACECV1", 40));
+      array_push($lines, bpad("MIN# 18052117594479336", 40));
+      array_push($lines, bpad("PTU# FP052018-045-0169487-00006", 40));
+      array_push($lines, bpad("Accred# 040-205257440-000305-15061", 40));
+    }
+
+    if ($brcode=='CM1') {
+      array_push($lines, bpad("ALQUIROS, NICOLE IONE GARCIA", 40));
+      array_push($lines, bpad("(GILIGAN'S RESTAURANT)", 40));
+      array_push($lines, bpad("GILIGAN'S CIRCUIT MAKATI", 40));
+      array_push($lines, bpad("CIRCUIT LANE AYALA MALL,REYES AVE.", 40));
+      array_push($lines, bpad("BRGY.CARMONA, MAKATI CITY 1207", 40));
+      array_push($lines, bpad("#232-360-252-002 VAT", 40));
+      array_push($lines, bpad("S/N Z9ADJ8SV", 40));
+      array_push($lines, bpad("MIN# 17100607430441455", 40));
+      array_push($lines, bpad("PTU# FP102017-049-0140347-00002", 40));
+      array_push($lines, bpad("Accred# 040-205257440-000305-15061", 40));
+    }
+
     return $lines;
   }
 
@@ -5098,8 +5124,11 @@ class Eod extends Command
     switch (trim($this->sysinfo->gi_brcode)) {
       case 'ANG':
         return "GILIGAN'S ISLAND RESTAURANT";
+      case 'CM1':
+        return "GILIGAN'S RESTAURANT";
         break;
       case 'MAR':
+      case 'AMK':
         return "GILIGAN'S";
         break;
       default:
