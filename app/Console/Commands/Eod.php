@@ -5125,7 +5125,7 @@ class Eod extends Command
       case 'ANG':
         return "GILIGAN'S ISLAND RESTAURANT";
       case 'CM1':
-        return "GILIGAN'S RESTAURANT UNIT C1-146";
+        return "GILIGAN'S RESTAURANT";
         break;
       case 'MAR':
       case 'AMK':
