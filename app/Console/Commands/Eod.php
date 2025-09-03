@@ -4447,6 +4447,8 @@ class Eod extends Command
       'trans_cnt'=> number_format($trans_cnt, 0, '.', ''),
       'cash_sale' => number_format($cash_sale, 2, '.', ''),
       'charge_sale'=> number_format($charge_sale, 2, '.', ''),
+      'begor'=> number_format($data[5], 0, '.', ''),
+      'endor'=> number_format($data[6], 0, '.', ''),
     ]);
 
     $now = $this->getJsonArray($date);
@@ -4690,6 +4692,8 @@ class Eod extends Command
     array_push($lines, rpad('Customer Count', 23).lpad(nf($data['cust_cnt'], 0, true), 17));
     array_push($lines, rpad('Cash Sales', 23).lpad(nf($data['cash_sale'], 2, true), 17));
     array_push($lines, rpad('Charge Sales', 23).lpad(nf($data['charge_sale'], 2, true), 17));
+    array_push($lines, rpad('Beg OR', 23).lpad($data['begor'], 17));
+    array_push($lines, rpad('End OR', 23).lpad($data['endor'], 17));
     array_push($lines, rpad('ZRead Count', 23).lpad(nf($data['zcounter'], 0, true), 17));
     array_push($lines, bpad("----------------------------------------", 40));
     array_push($lines, bpad('DATE: '.$date->format('m/d/Y'), 40));
@@ -5124,6 +5128,7 @@ class Eod extends Command
     switch (trim($this->sysinfo->gi_brcode)) {
       case 'ANG':
         return "GILIGAN'S ISLAND RESTAURANT";
+      case 'AST':
       case 'CM1':
         return "GILIGAN'S RESTAURANT";
         break;
