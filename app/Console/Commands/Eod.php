@@ -4145,7 +4145,7 @@ class Eod extends Command
       $tcust = $row['sr_tcust']-$row['sr_body'];
     }
 
-    $oth_disc = $row['dis_gpc']+$row['dis_vip']+$row['dis_udisc']+$row['dis_prom'];
+    $oth_disc = $row['dis_pwd']+$row['dis_gpc']+$row['dis_vip']+$row['dis_udisc']+$row['dis_prom'];
 
 
     $master = $visa = $amex = $jcb = $diners = $charge = $cash = $other_pay = 0; 
