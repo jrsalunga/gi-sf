@@ -4913,7 +4913,7 @@ class Eod extends Command
             $data['EOD'][107] += ($r['sr_tcust']-$r['sr_body']); // total customer
           }
 
-          if ($r['sr_disc']>0 || $r['oth_disc']>0 || $r['u_disc']>0 || $r['promo_amt']>0) {
+          if ($r['sr_disc']>0 || $r['oth_disc']>0 || $r['u_disc']>0 || $r['promo_amt']>0 || $r['dis_gpc']>0 || $r['dis_vip']>0 || $r['dis_pwd']>0) {
             $data['EOD'][18] +=$r['disc_amt']; // total disc amt
             $data['EOD'][19]++; // total disc trans
           }
