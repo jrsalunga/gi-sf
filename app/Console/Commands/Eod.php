@@ -4906,14 +4906,14 @@ class Eod extends Command
               $data['EOD'][27]++; // total disc trans
             }
             // compute other disc
-            if ($r['dis_gpc']>0 || $r['dis_vip']>0 || $r['dis_pwd']>0 || $r['dis_udisc']>0 || $r['dis_prom']>0) {
-              $data['EOD'][31] +=($r['dis_gpc']+$r['dis_vip']+$r['dis_pwd']+$r['dis_udisc']+$r['dis_prom']); // total disc amt
+            if ($r['dis_gpc']>0 || $r['dis_vip']>0 || $r['dis_pwd']>0 || $r['dis_udisc']>0 || $r['dis_prom']>0 || $r['dis_vx']>0) {
+              $data['EOD'][31] +=($r['dis_gpc']+$r['dis_vip']+$r['dis_pwd']+$r['dis_udisc']+$r['dis_prom']+$r['dis_vx']); // total disc amt
               $data['EOD'][32]++; // total disc trans
             }
             $data['EOD'][107] += ($r['sr_tcust']-$r['sr_body']); // total customer
           }
 
-          if ($r['sr_disc']>0 || $r['oth_disc']>0 || $r['u_disc']>0 || $r['promo_amt']>0 || $r['dis_gpc']>0 || $r['dis_vip']>0 || $r['dis_pwd']>0) {
+          if ($r['sr_disc']>0 || $r['oth_disc']>0 || $r['u_disc']>0 || $r['promo_amt']>0 || $r['dis_gpc']>0 || $r['dis_vip']>0 || $r['dis_pwd']>0 || $r['dis_vx']>0) {
             $data['EOD'][18] +=$r['disc_amt']; // total disc amt
             $data['EOD'][19]++; // total disc trans
           }
