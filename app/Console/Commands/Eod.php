@@ -4116,7 +4116,7 @@ class Eod extends Command
 
   private function aliGetTrans(Carbon $date, array $row) {
 
-    $vat = $vtble = $ves = $vea = $qty_sld = $pwd = $sr = $tot_disc = 0;
+    $vat = $vtble = $ves = $vea = $qty_sld = $pwd = $sr = $vx = $tot_disc = 0;
     
     if ($row['sr_disc']>0) {
       $ves = $row['tot_chrg'];
@@ -4145,7 +4145,7 @@ class Eod extends Command
       $tcust = $row['sr_tcust']-$row['sr_body'];
     }
 
-    $oth_disc = $row['dis_pwd']+$row['dis_gpc']+$row['dis_vip']+$row['dis_udisc']+$row['dis_prom'];
+    $oth_disc = $row['dis_pwd']+$row['dis_gpc']+$row['dis_vip']+$row['dis_udisc']+$row['dis_prom']+$row['dis_vx'];
 
 
     $master = $visa = $amex = $jcb = $diners = $charge = $cash = $other_pay = 0; 
@@ -4229,7 +4229,7 @@ class Eod extends Command
     foreach($items as $k => $v)
       $qty_sld += $v['QTY'];
 
-    $tot_disc = $row['promo_amt'] + $row['sr_disc'] + $row['oth_disc'] + $row['u_disc'];
+    $tot_disc = $row['promo_amt'] + $row['sr_disc'] + $row['oth_disc'] + $row['u_disc'] + $row['dis_gpc'] + $row['dis_pwd']  + $row['dis_vx'];
     
     $datas = [
       'CDATE' => $row['vfpdate']->format('H')<8 ? $row['vfpdate']->copy()->addDay()->format('Y-m-d') : $row['vfpdate']->format('Y-m-d'),
@@ -4363,6 +4363,11 @@ class Eod extends Command
             fwrite($fp, $ln.PHP_EOL);
           }
       } else {
+
+        // if ($v=='16987') { // check invoice # and print receipt detail
+        //     print_r($rcpt);
+        // }
+        
         $ln = $k.','.$v; 
         fwrite($fp, $ln.PHP_EOL);
       }
@@ -5451,7 +5456,7 @@ class Eod extends Command
     
     $disc_type = NULL;
     $disc_amt = 0;
-    $a = ['DIS_GPC', 'DIS_VIP', 'DIS_PWD', 'DIS_EMP', 'DIS_SR', 'DIS_UDISC', 'DIS_PROM'];
+    $a = ['DIS_GPC', 'DIS_VIP', 'DIS_PWD', 'DIS_EMP', 'DIS_SR', 'DIS_UDISC', 'DIS_PROM', 'DIS_VX'];
     foreach ($a as $key => $value) {
       if (isset($r[$value]) && $r[$value]>0) {
         $disc_type = explode('_', $value)[1];
@@ -5501,6 +5506,7 @@ class Eod extends Command
     $row['dis_sr']        = trim($r['DIS_SR']);
     $row['dis_udisc']     = trim($r['DIS_UDISC']);
     $row['dis_prom']      = trim($r['DIS_PROM']);
+    $row['dis_vx']        = trim($r['DIS_VX']);
     $row['grschrg']       = trim($r['GRSCHRG']);
     $row['totchrg']       = trim($r['TOTCHRG']);
     $row['saletype']      = trim($r['CUSFAX']);
